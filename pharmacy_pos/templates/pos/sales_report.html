@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block header %}Sales Report{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-2xl font-semibold mb-6 text-blue-800">Sales Report</h2>
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead>
+                <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for sale in sales %}
+                <tr>
+                    <td class="px-4 py-2">{{ sale.sale_date }}</td>
+                    <td class="px-4 py-2">{{ sale.customer }}</td>
+                    <td class="px-4 py-2">{{ sale.total_amount }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" class="px-4 py-2 text-center text-gray-400">No sales found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

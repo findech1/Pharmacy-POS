@@ -1,216 +1,409 @@
 {% extends 'base.html' %}
 
-{% block header %}Point of Sale{% endblock %}
+{% block title %}Point of Sale - Pharmacy POS{% endblock %}
+{% block page_title %}Point of Sale{% endblock %}
+{% block page_description %}Process customer transactions and manage sales{% endblock %}
 
 {% block content %}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Products Section -->
-    <div class="lg:col-span-2">
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Select Products</h3>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+    <!-- Product Selection Section -->
+    <div class="lg:col-span-2 bg-white rounded-lg shadow-md">
+        <!-- Search and Filters -->
+        <div class="p-6 border-b border-gray-200">
+            <div class="flex flex-col md:flex-row gap-4">
+                <div class="flex-1">
+                    <div class="relative">
+                        <input type="text" id="product-search" placeholder="Search medicines..." 
+                               class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <select id="category-filter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="">All Categories</option>
+                        {% for category in categories %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button onclick="clearFilters()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
+                        <i class="fas fa-times mr-1"></i> Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Products Grid -->
+        <div class="p-6">
+            <div id="products-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
                 {% for medicine in medicines %}
-                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md cursor-pointer medicine-card" 
+                <div class="product-card border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" 
                      data-id="{{ medicine.id }}" 
                      data-name="{{ medicine.name }}" 
-                     data-price="{{ medicine.price }}">
-                    <h4 class="font-medium text-gray-900">{{ medicine.name }}</h4>
-                    <p class="text-sm text-gray-600">{{ medicine.category.name }}</p>
-                    <p class="text-lg font-semibold text-blue-600">${{ medicine.price }}</p>
-                    <p class="text-xs text-gray-500">Stock: {{ medicine.total_quantity }}</p>
+                     data-price="{{ medicine.selling_price }}" 
+                     data-stock="{{ medicine.total_quantity }}"
+                     data-category="{{ medicine.category.id|default:'' }}">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-semibold text-gray-900 text-sm">{{ medicine.name }}</h4>
+                        <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                            {{ medicine.total_quantity }} left
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-600 mb-2">{{ medicine.category.name|default:"No Category" }}</p>
+                    <div class="flex justify-between items-center">
+                        <span class="text-lg font-bold text-blue-600">${{ medicine.selling_price|floatformat:2 }}</span>
+                        <button onclick='addToCart({{ medicine.id }}, "{{ medicine.name|escapejs }}", {{ medicine.selling_price }}, {{ medicine.total_quantity }})'
+                                                        class="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
+                                                        {% if medicine.total_quantity <= 0 %}disabled{% endif %}>
+                            <i class="fas fa-plus mr-1"></i>Add
+                        </button>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-span-full text-center py-8">
+                    <i class="fas fa-pills text-gray-400 text-4xl mb-3"></i>
+                    <p class="text-gray-500">No medicines available</p>
                 </div>
                 {% endfor %}
             </div>
         </div>
     </div>
     
-    <!-- Cart Section -->
-    <div class="lg:col-span-1">
-        <div class="bg-white rounded-lg shadow p-6 sticky top-6">
+    <!-- Sale Summary Section -->
+    <div class="bg-white rounded-lg shadow-md flex flex-col">
+        <!-- Customer Selection -->
+        <div class="p-6 border-b border-gray-200">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Sale Items</h3>
             
-            <form method="post" action="{% url 'process_sale' %}" id="saleForm">
-                {% csrf_token %}
-                
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Customer (Optional)</label>
-                    <select name="customer_id" class="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        <option value="">Walk-in Customer</option>
-                        {% for customer in customers %}
-                        <option value="{{ customer.id }}">{{ customer.name }}</option>
-                        {% endfor %}
-                    </select>
+            <!-- Customer Selection -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Customer (Optional)</label>
+                <select id="customer-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="">Walk-in Customer</option>
+                    {% for customer in customers %}
+                        <option value="{{ customer.id }}">{{ customer.name }} - {{ customer.phone }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Payment Method -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+                <select id="payment-method" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="mobile">Mobile Money</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Cart Items -->
+        <div class="flex-1 p-6 border-b border-gray-200">
+            <div id="cart-items" class="space-y-3 max-h-64 overflow-y-auto">
+                <div id="empty-cart" class="text-center py-8">
+                    <i class="fas fa-shopping-cart text-gray-400 text-3xl mb-3"></i>
+                    <p class="text-gray-500">No items in cart</p>
                 </div>
-                
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                    <select name="payment_method" class="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        <option value="cash">Cash</option>
-                        <option value="card">Card</option>
-                        <option value="mobile">Mobile Money</option>
-                    </select>
+            </div>
+        </div>
+        
+        <!-- Sale Totals -->
+        <div class="p-6 border-b border-gray-200">
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Subtotal:</span>
+                    <span id="subtotal">$0.00</span>
                 </div>
-                
-                <div id="cartItems" class="space-y-2 mb-4 max-h-60 overflow-y-auto">
-                    <!-- Cart items will be added here dynamically -->
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Discount:</span>
+                    <div class="flex items-center">
+                        <input type="number" id="discount" value="0" min="0" max="100" 
+                               class="w-16 px-2 py-1 border border-gray-300 rounded text-right text-xs mr-1"
+                               onchange="updateTotals()">
+                        <span>%</span>
+                    </div>
                 </div>
-                
-                <div class="border-t pt-4">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="text-sm text-gray-600">Subtotal:</span>
-                        <span id="subtotal" class="font-semibold">$0.00</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Tax:</span>
+                    <div class="flex items-center">
+                        <input type="number" id="tax" value="0" min="0" max="100" 
+                               class="w-16 px-2 py-1 border border-gray-300 rounded text-right text-xs mr-1"
+                               onchange="updateTotals()">
+                        <span>%</span>
                     </div>
-                    
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="text-sm text-gray-600">Discount:</label>
-                        <input type="number" name="discount" step="0.01" min="0" value="0" 
-                               class="w-20 px-2 py-1 border border-gray-300 rounded text-right text-sm" 
-                               id="discount">
-                    </div>
-                    
-                    <div class="flex justify-between items-center mb-4">
-                        <label class="text-sm text-gray-600">Tax:</label>
-                        <input type="number" name="tax" step="0.01" min="0" value="0" 
-                               class="w-20 px-2 py-1 border border-gray-300 rounded text-right text-sm" 
-                               id="tax">
-                    </div>
-                    
-                    <div class="flex justify-between items-center mb-4 text-lg font-semibold">
-                        <span>Total:</span>
-                        <span id="total">$0.00</span>
-                    </div>
-                    
-                    <button type="submit" 
-                            class="w-full bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed" 
-                            id="processBtn" disabled>
-                        Process Sale
-                    </button>
-                    
-                    <button type="button" 
-                            class="w-full bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 mt-2" 
-                            onclick="clearCart()">
-                        Clear Cart
-                    </button>
                 </div>
-            </form>
+                <hr class="my-2">
+                <div class="flex justify-between text-lg font-bold">
+                    <span>Total:</span>
+                    <span id="total">$0.00</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="p-6 space-y-3">
+            <button id="process-sale-btn" onclick="processSale()" 
+                    class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:bg-gray-400" 
+                    disabled>
+                <i class="fas fa-check mr-2"></i>Process Sale
+            </button>
+            <button onclick="clearCart()" 
+                    class="w-full bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                <i class="fas fa-trash mr-2"></i>Clear Cart
+            </button>
         </div>
     </div>
 </div>
 
+<!-- Sale Success Modal -->
+<div id="sale-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-8 max-w-md mx-4">
+        <div class="text-center">
+            <i class="fas fa-check-circle text-green-500 text-6xl mb-4"></i>
+            <h3 class="text-xl font-bold text-gray-900 mb-2">Sale Completed!</h3>
+            <p class="text-gray-600 mb-6">Sale #<span id="sale-id"></span> has been processed successfully.</p>
+            <div class="space-y-3">
+                <button onclick="printReceipt()" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-print mr-2"></i>Print Receipt
+                </button>
+                <button onclick="closeSaleModal()" class="w-full bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
-let cart = {};
+let cart = [];
+let saleId = null;
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Add click event to medicine cards
-    document.querySelectorAll('.medicine-card').forEach(card => {
-        card.addEventListener('click', function() {
-            const id = this.dataset.id;
-            const name = this.dataset.name;
-            const price = parseFloat(this.dataset.price);
-            
-            addToCart(id, name, price);
-        });
-    });
-    
-    // Add event listeners for discount and tax
-    document.getElementById('discount').addEventListener('input', updateTotal);
-    document.getElementById('tax').addEventListener('input', updateTotal);
-});
-
-function addToCart(id, name, price) {
-    if (cart[id]) {
-        cart[id].quantity += 1;
-    } else {
-        cart[id] = {
-            name: name,
-            price: price,
-            quantity: 1
-        };
+// Add item to cart
+function addToCart(id, name, price, stock) {
+    if (stock <= 0) {
+        alert('This item is out of stock!');
+        return;
     }
-    updateCartDisplay();
-}
-
-function removeFromCart(id) {
-    delete cart[id];
-    updateCartDisplay();
-}
-
-function updateQuantity(id, quantity) {
-    if (quantity <= 0) {
-        removeFromCart(id);
-    } else {
-        cart[id].quantity = quantity;
-        updateCartDisplay();
-    }
-}
-
-function updateCartDisplay() {
-    const cartItems = document.getElementById('cartItems');
-    const saleForm = document.getElementById('saleForm');
     
-    // Remove existing hidden inputs
-    saleForm.querySelectorAll('input[name^="medicine_"]').forEach(input => {
-        input.remove();
-    });
-    
-    if (Object.keys(cart).length === 0) {
-        cartItems.innerHTML = '<p class="text-gray-500 text-sm">No items in cart</p>';
-        document.getElementById('processBtn').disabled = true;
-    } else {
-        let html = '';
-        for (const [id, item] of Object.entries(cart)) {
-            html += `
-                <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
-                    <div class="flex-1">
-                        <p class="font-medium text-sm">${item.name}</p>
-                        <p class="text-xs text-gray-600">${item.price.toFixed(2)} each</p>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <button type="button" onclick="updateQuantity('${id}', ${item.quantity - 1})" 
-                                class="w-6 h-6 bg-red-500 text-white rounded text-xs">-</button>
-                        <span class="text-sm font-medium">${item.quantity}</span>
-                        <button type="button" onclick="updateQuantity('${id}', ${item.quantity + 1})" 
-                                class="w-6 h-6 bg-green-500 text-white rounded text-xs">+</button>
-                    </div>
-                    <button type="button" onclick="removeFromCart('${id}')" 
-                            class="ml-2 text-red-500 hover:text-red-700">
-                        <i class="fas fa-trash text-xs"></i>
-                    </button>
-                </div>
-            `;
-            
-            // Add hidden input for this medicine
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = `medicine_${id}`;
-            input.value = item.quantity;
-            saleForm.appendChild(input);
+    const existingItem = cart.find(item => item.id === id);
+    if (existingItem) {
+        if (existingItem.quantity >= stock) {
+            alert('Cannot add more items. Stock limit reached!');
+            return;
         }
-        cartItems.innerHTML = html;
-        document.getElementById('processBtn').disabled = false;
+        existingItem.quantity += 1;
+    } else {
+        cart.push({
+            id: id,
+            name: name,
+            price: parseFloat(price),
+            quantity: 1,
+            stock: stock
+        });
     }
     
-    updateTotal();
+    updateCartDisplay();
+    updateTotals();
 }
 
-function updateTotal() {
-    let subtotal = 0;
-    for (const [id, item] of Object.entries(cart)) {
-        subtotal += item.price * item.quantity;
+// Remove item from cart
+function removeFromCart(id) {
+    cart = cart.filter(item => item.id !== id);
+    updateCartDisplay();
+    updateTotals();
+}
+
+// Update item quantity
+function updateQuantity(id, quantity) {
+    const item = cart.find(item => item.id === id);
+    if (item) {
+        if (quantity > item.stock) {
+            alert('Cannot exceed stock limit!');
+            return;
+        }
+        if (quantity <= 0) {
+            removeFromCart(id);
+        } else {
+            item.quantity = parseInt(quantity);
+            updateCartDisplay();
+            updateTotals();
+        }
+    }
+}
+
+// Update cart display
+function updateCartDisplay() {
+    const cartContainer = document.getElementById('cart-items');
+    const emptyCart = document.getElementById('empty-cart');
+    
+    if (cart.length === 0) {
+        emptyCart.style.display = 'block';
+        document.getElementById('process-sale-btn').disabled = true;
+        return;
     }
     
+    emptyCart.style.display = 'none';
+    document.getElementById('process-sale-btn').disabled = false;
+    
+    cartContainer.innerHTML = cart.map(item => `
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div class="flex-1">
+                <h4 class="font-medium text-sm">${item.name}</h4>
+                <p class="text-xs text-gray-600">$${item.price.toFixed(2)} each</p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="updateQuantity(${item.id}, ${item.quantity - 1})" 
+                        class="w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600">-</button>
+                <input type="number" value="${item.quantity}" min="1" max="${item.stock}" 
+                       onchange="updateQuantity(${item.id}, this.value)"
+                       class="w-12 text-center border border-gray-300 rounded text-xs py-1">
+                <button onclick="updateQuantity(${item.id}, ${item.quantity + 1})" 
+                        class="w-6 h-6 bg-green-500 text-white rounded-full text-xs hover:bg-green-600">+</button>
+                <button onclick="removeFromCart(${item.id})" 
+                        class="w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600">×</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Update totals
+function updateTotals() {
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const discountPercent = parseFloat(document.getElementById('discount').value) || 0;
+    const taxPercent = parseFloat(document.getElementById('tax').value) || 0;
+    
+    const discountAmount = subtotal * (discountPercent / 100);
+    const afterDiscount = subtotal - discountAmount;
+    const taxAmount = afterDiscount * (taxPercent / 100);
+    const total = afterDiscount + taxAmount;
+    
+    document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
+    document.getElementById('total').textContent = '$' + total.toFixed(2);
+}
+
+// Clear cart
+function clearCart() {
+    if (cart.length > 0 && confirm('Are you sure you want to clear the cart?')) {
+        cart = [];
+        updateCartDisplay();
+        updateTotals();
+    }
+}
+
+// Process sale
+function processSale() {
+    if (cart.length === 0) {
+        alert('Cart is empty!');
+        return;
+    }
+    
+    const customerId = document.getElementById('customer-select').value;
+    const paymentMethod = document.getElementById('payment-method').value;
     const discount = parseFloat(document.getElementById('discount').value) || 0;
     const tax = parseFloat(document.getElementById('tax').value) || 0;
-    const total = subtotal - discount + tax;
     
-    document.getElementById('subtotal').textContent = `${subtotal.toFixed(2)}`;
-    document.getElementById('total').textContent = `${total.toFixed(2)}`;
+    const saleData = {
+        customer_id: customerId || null,
+        payment_method: paymentMethod,
+        discount_percent: discount,
+        tax_percent: tax,
+        items: cart.map(item => ({
+            medicine_id: item.id,
+            quantity: item.quantity,
+            unit_price: item.price
+        }))
+    };
+    
+    // Send to backend
+    fetch('{% url "process_sale" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(saleData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            saleId = data.sale_id;
+            document.getElementById('sale-id').textContent = saleId;
+            document.getElementById('sale-modal').classList.remove('hidden');
+            document.getElementById('sale-modal').classList.add('flex');
+            clearCart();
+        } else {
+            alert('Error processing sale: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error processing sale. Please try again.');
+    });
 }
 
-function clearCart() {
-    cart = {};
-    updateCartDisplay();
+// Close sale modal
+function closeSaleModal() {
+    document.getElementById('sale-modal').classList.add('hidden');
+    document.getElementById('sale-modal').classList.remove('flex');
+}
+
+// Print receipt
+function printReceipt() {
+    if (saleId) {
+        window.open(`/receipt/${saleId}/`, '_blank');
+    }
+}
+
+// Search functionality
+document.getElementById('product-search').addEventListener('input', function() {
+    filterProducts();
+});
+
+document.getElementById('category-filter').addEventListener('change', function() {
+    filterProducts();
+});
+
+function filterProducts() {
+    const search = document.getElementById('product-search').value.toLowerCase();
+    const category = document.getElementById('category-filter').value;
+    const cards = document.querySelectorAll('.product-card');
+    
+    cards.forEach(card => {
+        const name = card.dataset.name.toLowerCase();
+        const cardCategory = card.dataset.category;
+        
+        const matchesSearch = name.includes(search);
+        const matchesCategory = !category || cardCategory === category;
+        
+        if (matchesSearch && matchesCategory) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function clearFilters() {
+    document.getElementById('product-search').value = '';
+    document.getElementById('category-filter').value = '';
+    filterProducts();
+}
+
+// Get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
 }
 </script>
 {% endblock %}

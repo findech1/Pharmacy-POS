@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block header %}Add User{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-2xl font-semibold mb-6 text-blue-800">Add New User</h2>
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            {% for field in form %}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                <p class="text-red-600 text-sm mt-1">{{ field.errors.0 }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <div class="flex justify-end space-x-4">
+                <a href="{% url 'dashboard' %}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400">Cancel</a>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add User</button>
+            </div>
+        </form>
+    </div>
+</div>
+<style>
+    input[type="text"], input[type="email"], input[type="number"], input[type="password"], select, textarea {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 0.375rem;
+    }
+    input:focus, select:focus, textarea:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px #3b82f6;
+        border-color: #3b82f6;
+    }
+    textarea {
+        resize: vertical;
+        min-height: 80px;
+    }
+</style>
+{% endblock %}
