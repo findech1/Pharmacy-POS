@@ -1,414 +1,503 @@
 {% extends 'base.html' %}
-
 {% block title %}Point of Sale - Pharmacy POS{% endblock %}
 {% block page_title %}Point of Sale{% endblock %}
 {% block page_description %}Process customer transactions and manage sales{% endblock %}
 
 {% block content %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-    <!-- Product Selection Section -->
-    <div class="lg:col-span-2 bg-white rounded-lg shadow-md">
-        <!-- Search and Filters -->
-        <div class="p-6 border-b border-gray-200">
-            <div class="flex flex-col md:flex-row gap-4">
-                <div class="flex-1">
-                    <div class="relative">
-                        <input type="text" id="product-search" placeholder="Search medicines..." 
-                               class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <select id="category-filter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                        <option value="">All Categories</option>
-                        {% for category in categories %}
-                            <option value="{{ category.id }}">{{ category.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button onclick="clearFilters()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
-                        <i class="fas fa-times mr-1"></i> Clear
-                    </button>
-                </div>
-            </div>
+  <!-- Product Selection Section -->
+  <div class="lg:col-span-2 bg-white rounded-lg shadow-md">
+    <!-- Search and Filters -->
+    <div class="p-6 border-b border-gray-200">
+      <div class="flex flex-col md:flex-row gap-4">
+        <div class="flex-1">
+          <div class="relative">
+            <input
+              type="text"
+              id="product-search"
+              placeholder="Search medicines..."
+              class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+          </div>
         </div>
-        
-        <!-- Products Grid -->
-        <div class="p-6">
-            <div id="products-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                {% for medicine in medicines %}
-                <div class="product-card border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" 
-                     data-id="{{ medicine.id }}" 
-                     data-name="{{ medicine.name }}" 
-                     data-price="{{ medicine.selling_price }}" 
-                     data-stock="{{ medicine.total_quantity }}"
-                     data-category="{{ medicine.category.id|default:'' }}">
-                    <div class="flex justify-between items-start mb-2">
-                        <h4 class="font-semibold text-gray-900 text-sm">{{ medicine.name }}</h4>
-                        <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                            {{ medicine.total_quantity }} left
-                        </span>
-                    </div>
-                    <p class="text-xs text-gray-600 mb-2">{{ medicine.category.name|default:"No Category" }}</p>
-                    <div class="flex justify-between items-center">
-                        <span class="text-lg font-bold text-blue-600">${{ medicine.selling_price|floatformat:2 }}</span>
-                        <button onclick='addToCart({{ medicine.id }}, "{{ medicine.name|escapejs }}", {{ medicine.selling_price }}, {{ medicine.total_quantity }})'
-                                                        class="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
-                                                        {% if medicine.total_quantity <= 0 %}disabled{% endif %}>
-                            <i class="fas fa-plus mr-1"></i>Add
-                        </button>
-                    </div>
-                </div>
-                {% empty %}
-                <div class="col-span-full text-center py-8">
-                    <i class="fas fa-pills text-gray-400 text-4xl mb-3"></i>
-                    <p class="text-gray-500">No medicines available</p>
-                </div>
-                {% endfor %}
-            </div>
+        <div class="flex gap-2">
+          <select
+            id="category-filter"
+            class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Categories</option>
+            {% for category in categories %}
+            <option value="{{ category.id }}">{{ category.name }}</option>
+            {% endfor %}
+          </select>
+          <button
+            type="button"
+            onclick="clearFilters()"
+            class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            <i class="fas fa-times mr-1"></i> Clear
+          </button>
         </div>
+      </div>
     </div>
-    
-    <!-- Sale Summary Section -->
-    <div class="bg-white rounded-lg shadow-md flex flex-col">
-        <!-- Customer Selection -->
-        <div class="p-6 border-b border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Sale Items</h3>
-            
-            <!-- Customer Selection -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Customer (Optional)</label>
-                <select id="customer-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option value="">Walk-in Customer</option>
-                    {% for customer in customers %}
-                        <option value="{{ customer.id }}">{{ customer.name }} - {{ customer.phone }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            
-            <!-- Payment Method -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                <select id="payment-method" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="mobile">Mobile Money</option>
-                </select>
-            </div>
-        </div>
-        
-        <!-- Cart Items -->
-        <div class="flex-1 p-6 border-b border-gray-200">
-            <div id="cart-items" class="space-y-3 max-h-64 overflow-y-auto">
-                <div id="empty-cart" class="text-center py-8">
-                    <i class="fas fa-shopping-cart text-gray-400 text-3xl mb-3"></i>
-                    <p class="text-gray-500">No items in cart</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Sale Totals -->
-        <div class="p-6 border-b border-gray-200">
-            <div class="space-y-2 text-sm">
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Subtotal:</span>
-                    <span id="subtotal">$0.00</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Discount:</span>
-                    <div class="flex items-center">
-                        <input type="number" id="discount" value="0" min="0" max="100" 
-                               class="w-16 px-2 py-1 border border-gray-300 rounded text-right text-xs mr-1"
-                               onchange="updateTotals()">
-                        <span>%</span>
-                    </div>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Tax:</span>
-                    <div class="flex items-center">
-                        <input type="number" id="tax" value="0" min="0" max="100" 
-                               class="w-16 px-2 py-1 border border-gray-300 rounded text-right text-xs mr-1"
-                               onchange="updateTotals()">
-                        <span>%</span>
-                    </div>
-                </div>
-                <hr class="my-2">
-                <div class="flex justify-between text-lg font-bold">
-                    <span>Total:</span>
-                    <span id="total">$0.00</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Action Buttons -->
-        <div class="p-6 space-y-3">
-            <button id="process-sale-btn" onclick="processSale()" 
-                    class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:bg-gray-400" 
-                    disabled>
-                <i class="fas fa-check mr-2"></i>Process Sale
+
+    <!-- Products Grid -->
+    <div class="p-6">
+      <div
+        id="products-grid"
+        class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-96 overflow-y-auto"
+      >
+        {% for medicine in medicines %}
+        <div
+          class="product-card border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+          data-id="{{ medicine.id }}"
+          data-name="{{ medicine.name|escapejs }}"
+          data-price="{{ medicine.selling_price }}"
+          data-stock="{{ medicine.total_quantity }}"
+          data-category="{{ medicine.category.id|default:'' }}"
+        >
+          <div class="flex justify-between items-start mb-2">
+            <h4 class="font-semibold text-gray-900 text-sm">
+              {{ medicine.name }}
+            </h4>
+            <span
+              class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full"
+            >
+              {{ medicine.total_quantity }} left
+            </span>
+          </div>
+          <p class="text-xs text-gray-600 mb-2">
+            {{ medicine.category.name|default:"No Category" }}
+          </p>
+          <div class="flex justify-between items-center">
+            <span class="text-lg font-bold text-blue-600"
+              >Ksh {{ medicine.selling_price|floatformat:2 }}</span
+            >
+            <button
+              type="button"
+              onclick="event.stopPropagation(); addToCart({{ medicine.id }}, '{{ medicine.name|escapejs }}', {{ medicine.selling_price }}, {{ medicine.total_quantity }})"
+              class="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
+              {% if medicine.total_quantity <= 0 %}disabled{% endif %}
+            >
+              <i class="fas fa-plus mr-1"></i>Add
             </button>
-            <button onclick="clearCart()" 
-                    class="w-full bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors">
-                <i class="fas fa-trash mr-2"></i>Clear Cart
-            </button>
+          </div>
         </div>
+        {% empty %}
+        <div class="col-span-full text-center py-8">
+          <i class="fas fa-pills text-gray-400 text-4xl mb-3"></i>
+          <p class="text-gray-500">No medicines available</p>
+        </div>
+        {% endfor %}
+      </div>
     </div>
+  </div>
+
+  <!-- Sale Summary Section -->
+  <div class="bg-white rounded-lg shadow-md flex flex-col">
+    <!-- Customer Selection -->
+    <div class="p-6 border-b border-gray-200">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Sale Items</h3>
+
+      <!-- Customer Selection -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2"
+          >Customer (Optional)</label
+        >
+        <select
+          id="customer-select"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Walk-in Customer</option>
+          {% for customer in customers %}
+          <option value="{{ customer.id }}">
+            {{ customer.name }} - {{ customer.phone }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Payment Method -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2"
+          >Payment Method</label
+        >
+        <select
+          id="payment-method"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="cash">Cash</option>
+          <option value="card">Card</option>
+          <option value="mobile">Mobile Money</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Cart Items -->
+    <div class="flex-1 p-6 border-b border-gray-200">
+      <div id="cart-items" class="space-y-3 max-h-64 overflow-y-auto">
+        <div id="empty-cart" class="text-center py-8">
+          <i class="fas fa-shopping-cart text-gray-400 text-3xl mb-3"></i>
+          <p class="text-gray-500">No items in cart</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sale Totals -->
+    <div class="p-6 border-b border-gray-200">
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <span class="text-gray-600">Subtotal:</span>
+          <span id="subtotal">Ksh 0.00</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">Discount:</span>
+          <div class="flex items-center">
+            <input
+              type="number"
+              id="discount"
+              value="0"
+              min="0"
+              max="100"
+              class="w-16 px-2 py-1 border border-gray-300 rounded text-right text-xs mr-1"
+              onchange="updateTotals()"
+            />
+            <span>%</span>
+          </div>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">Tax:</span>
+          <div class="flex items-center">
+            <input
+              type="number"
+              id="tax"
+              value="0"
+              min="0"
+              max="100"
+              class="w-16 px-2 py-1 border border-gray-300 rounded text-right text-xs mr-1"
+              onchange="updateTotals()"
+            />
+            <span>%</span>
+          </div>
+        </div>
+        <hr class="my-2" />
+        <div class="flex justify-between text-lg font-bold">
+          <span>Total:</span>
+          <span id="total">Ksh 0.00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="p-6 space-y-3">
+      <button
+        id="process-sale-btn"
+        onclick="processSale()"
+        class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:bg-gray-400"
+        disabled
+      >
+        <i class="fas fa-check mr-2"></i>Process Sale
+      </button>
+      <button
+        type="button"
+        onclick="clearCart()"
+        class="w-full bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors"
+      >
+        <i class="fas fa-trash mr-2"></i>Clear Cart
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- Sale Success Modal -->
-<div id="sale-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-lg p-8 max-w-md mx-4">
-        <div class="text-center">
-            <i class="fas fa-check-circle text-green-500 text-6xl mb-4"></i>
-            <h3 class="text-xl font-bold text-gray-900 mb-2">Sale Completed!</h3>
-            <p class="text-gray-600 mb-6">Sale #<span id="sale-id"></span> has been processed successfully.</p>
-            <div class="space-y-3">
-                <button onclick="printReceipt()" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                    <i class="fas fa-print mr-2"></i>Print Receipt
-                </button>
-                <button onclick="closeSaleModal()" class="w-full bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors">
-                    Close
-                </button>
-            </div>
-        </div>
+<div
+  id="sale-modal"
+  class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50"
+>
+  <div class="bg-white rounded-lg p-8 max-w-md mx-4">
+    <div class="text-center">
+      <i class="fas fa-check-circle text-green-500 text-6xl mb-4"></i>
+      <h3 class="text-xl font-bold text-gray-900 mb-2">Sale Completed!</h3>
+      <p class="text-gray-600 mb-6">
+        Sale #<span id="sale-id"></span> has been processed successfully.
+      </p>
+      <div class="space-y-3">
+        <button
+          type="button"
+          onclick="printReceipt()"
+          class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <i class="fas fa-print mr-2"></i>Print Receipt
+        </button>
+        <button
+          type="button"
+          onclick="closeSaleModal()"
+          class="w-full bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition-colors"
+        >
+          Close
+        </button>
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-let cart = [];
-let saleId = null;
+  let cart = [];
+  let saleId = null;
 
-// Add item to cart
-function addToCart(id, name, price, stock) {
+  // Add item to cart
+  function addToCart(id, name, price, stock) {
     if (stock <= 0) {
-        alert('This item is out of stock!');
-        return;
+      alert("This item is out of stock!");
+      return;
     }
-    
-    const existingItem = cart.find(item => item.id === id);
+
+    const existingItem = cart.find((item) => item.id === id);
     if (existingItem) {
-        if (existingItem.quantity >= stock) {
-            alert('Cannot add more items. Stock limit reached!');
-            return;
-        }
-        existingItem.quantity += 1;
-    } else {
-        cart.push({
-            id: id,
-            name: name,
-            price: parseFloat(price),
-            quantity: 1,
-            stock: stock
-        });
-    }
-    
-    updateCartDisplay();
-    updateTotals();
-}
-
-// Remove item from cart
-function removeFromCart(id) {
-    cart = cart.filter(item => item.id !== id);
-    updateCartDisplay();
-    updateTotals();
-}
-
-// Update item quantity
-function updateQuantity(id, quantity) {
-    const item = cart.find(item => item.id === id);
-    if (item) {
-        if (quantity > item.stock) {
-            alert('Cannot exceed stock limit!');
-            return;
-        }
-        if (quantity <= 0) {
-            removeFromCart(id);
-        } else {
-            item.quantity = parseInt(quantity);
-            updateCartDisplay();
-            updateTotals();
-        }
-    }
-}
-
-// Update cart display
-function updateCartDisplay() {
-    const cartContainer = document.getElementById('cart-items');
-    const emptyCart = document.getElementById('empty-cart');
-    
-    if (cart.length === 0) {
-        emptyCart.style.display = 'block';
-        document.getElementById('process-sale-btn').disabled = true;
+      if (existingItem.quantity >= stock) {
+        alert("Cannot add more items. Stock limit reached!");
         return;
+      }
+      existingItem.quantity += 1;
+    } else {
+      cart.push({
+        id: id,
+        name: name,
+        price: parseFloat(price),
+        quantity: 1,
+        stock: stock,
+      });
     }
-    
-    emptyCart.style.display = 'none';
-    document.getElementById('process-sale-btn').disabled = false;
-    
-    cartContainer.innerHTML = cart.map(item => `
+
+    updateCartDisplay();
+    updateTotals();
+  }
+
+  // Remove item from cart
+  function removeFromCart(id) {
+    cart = cart.filter((item) => item.id !== id);
+    updateCartDisplay();
+    updateTotals();
+  }
+
+  // Update item quantity
+  function updateQuantity(id, quantity) {
+    const item = cart.find((item) => item.id === id);
+    if (item) {
+      if (quantity > item.stock) {
+        alert("Cannot exceed stock limit!");
+        return;
+      }
+      if (quantity <= 0) {
+        removeFromCart(id);
+      } else {
+        item.quantity = parseInt(quantity);
+        updateCartDisplay();
+        updateTotals();
+      }
+    }
+  }
+
+  // Update cart display
+  function updateCartDisplay() {
+    const cartContainer = document.getElementById("cart-items");
+    const emptyCart = document.getElementById("empty-cart");
+
+    if (cart.length === 0) {
+      emptyCart.style.display = "block";
+      document.getElementById("process-sale-btn").disabled = true;
+      return;
+    }
+
+    emptyCart.style.display = "none";
+    document.getElementById("process-sale-btn").disabled = false;
+
+    cartContainer.innerHTML = cart
+      .map(
+        (item) => `
         <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div class="flex-1">
                 <h4 class="font-medium text-sm">${item.name}</h4>
-                <p class="text-xs text-gray-600">$${item.price.toFixed(2)} each</p>
+                <p class="text-xs text-gray-600">Ksh ${item.price.toFixed(
+                  2
+                )} each</p>
             </div>
             <div class="flex items-center space-x-2">
-                <button onclick="updateQuantity(${item.id}, ${item.quantity - 1})" 
+                <button type="button" onclick="updateQuantity(${item.id}, ${
+          item.quantity - 1
+        })" 
                         class="w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600">-</button>
-                <input type="number" value="${item.quantity}" min="1" max="${item.stock}" 
+                <input type="number" value="${item.quantity}" min="1" max="${
+          item.stock
+        }" 
                        onchange="updateQuantity(${item.id}, this.value)"
                        class="w-12 text-center border border-gray-300 rounded text-xs py-1">
-                <button onclick="updateQuantity(${item.id}, ${item.quantity + 1})" 
+                <button type="button" onclick="updateQuantity(${item.id}, ${
+          item.quantity + 1
+        })" 
                         class="w-6 h-6 bg-green-500 text-white rounded-full text-xs hover:bg-green-600">+</button>
-                <button onclick="removeFromCart(${item.id})" 
+                <button type="button" onclick="removeFromCart(${item.id})" 
                         class="w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600">×</button>
             </div>
         </div>
-    `).join('');
-}
+    `
+      )
+      .join("");
+  }
 
-// Update totals
-function updateTotals() {
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const discountPercent = parseFloat(document.getElementById('discount').value) || 0;
-    const taxPercent = parseFloat(document.getElementById('tax').value) || 0;
-    
+  // Update totals
+  function updateTotals() {
+    const subtotal = cart.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+    const discountPercent =
+      parseFloat(document.getElementById("discount").value) || 0;
+    const taxPercent = parseFloat(document.getElementById("tax").value) || 0;
+
     const discountAmount = subtotal * (discountPercent / 100);
     const afterDiscount = subtotal - discountAmount;
     const taxAmount = afterDiscount * (taxPercent / 100);
     const total = afterDiscount + taxAmount;
-    
-    document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
-    document.getElementById('total').textContent = '$' + total.toFixed(2);
-}
 
-// Clear cart
-function clearCart() {
-    if (cart.length > 0 && confirm('Are you sure you want to clear the cart?')) {
-        cart = [];
-        updateCartDisplay();
-        updateTotals();
+    document.getElementById("subtotal").textContent = "Ksh " + subtotal.toFixed(2);
+    document.getElementById("total").textContent = "Ksh " + total.toFixed(2);
+  }
+
+  // Clear cart
+  function clearCart() {
+    if (
+      cart.length > 0 &&
+      confirm("Are you sure you want to clear the cart?")
+    ) {
+      cart = [];
+      updateCartDisplay();
+      updateTotals();
     }
-}
+  }
 
-// Process sale
-function processSale() {
+  // Process sale
+  function processSale() {
     if (cart.length === 0) {
-        alert('Cart is empty!');
-        return;
+      alert("Cart is empty!");
+      return;
     }
-    
-    const customerId = document.getElementById('customer-select').value;
-    const paymentMethod = document.getElementById('payment-method').value;
-    const discount = parseFloat(document.getElementById('discount').value) || 0;
-    const tax = parseFloat(document.getElementById('tax').value) || 0;
-    
+
+    const customerId = document.getElementById("customer-select").value;
+    const paymentMethod = document.getElementById("payment-method").value;
+    const discount = parseFloat(document.getElementById("discount").value) || 0;
+    const tax = parseFloat(document.getElementById("tax").value) || 0;
+
     const saleData = {
-        customer_id: customerId || null,
-        payment_method: paymentMethod,
-        discount_percent: discount,
-        tax_percent: tax,
-        items: cart.map(item => ({
-            medicine_id: item.id,
-            quantity: item.quantity,
-            unit_price: item.price
-        }))
+      customer_id: customerId || null,
+      payment_method: paymentMethod,
+      discount_percent: discount,
+      tax_percent: tax,
+      items: cart.map((item) => ({
+        medicine_id: item.id,
+        quantity: item.quantity,
+        unit_price: item.price,
+      })),
     };
-    
+
     // Send to backend
     fetch('{% url "process_sale" %}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        body: JSON.stringify(saleData)
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: JSON.stringify(saleData),
     })
-    .then(response => response.json())
-    .then(data => {
+      .then((response) => response.json())
+      .then((data) => {
         if (data.success) {
-            saleId = data.sale_id;
-            document.getElementById('sale-id').textContent = saleId;
-            document.getElementById('sale-modal').classList.remove('hidden');
-            document.getElementById('sale-modal').classList.add('flex');
-            clearCart();
+          saleId = data.sale_id;
+          document.getElementById("sale-id").textContent = saleId;
+          document.getElementById("sale-modal").classList.remove("hidden");
+          document.getElementById("sale-modal").classList.add("flex");
+          clearCart();
         } else {
-            alert('Error processing sale: ' + data.error);
+          alert("Error processing sale: " + data.error);
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error processing sale. Please try again.');
-    });
-}
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+        alert("Error processing sale. Please try again.");
+      });
+  }
 
-// Close sale modal
-function closeSaleModal() {
-    document.getElementById('sale-modal').classList.add('hidden');
-    document.getElementById('sale-modal').classList.remove('flex');
-}
+  // Close sale modal
+  function closeSaleModal() {
+    document.getElementById("sale-modal").classList.add("hidden");
+    document.getElementById("sale-modal").classList.remove("flex");
+  }
 
-// Print receipt
-function printReceipt() {
+  // Print receipt
+  function printReceipt() {
     if (saleId) {
-        window.open(`/receipt/${saleId}/`, '_blank');
+      window.open(`/receipt/${saleId}/`, "_blank");
     }
-}
+  }
 
-// Search functionality
-document.getElementById('product-search').addEventListener('input', function() {
-    filterProducts();
-});
-
-document.getElementById('category-filter').addEventListener('change', function() {
-    filterProducts();
-});
-
-function filterProducts() {
-    const search = document.getElementById('product-search').value.toLowerCase();
-    const category = document.getElementById('category-filter').value;
-    const cards = document.querySelectorAll('.product-card');
-    
-    cards.forEach(card => {
-        const name = card.dataset.name.toLowerCase();
-        const cardCategory = card.dataset.category;
-        
-        const matchesSearch = name.includes(search);
-        const matchesCategory = !category || cardCategory === category;
-        
-        if (matchesSearch && matchesCategory) {
-            card.style.display = 'block';
-        } else {
-            card.style.display = 'none';
-        }
+  // Search functionality
+  document
+    .getElementById("product-search")
+    .addEventListener("input", function () {
+      filterProducts();
     });
-}
 
-function clearFilters() {
-    document.getElementById('product-search').value = '';
-    document.getElementById('category-filter').value = '';
+  document
+    .getElementById("category-filter")
+    .addEventListener("change", function () {
+      filterProducts();
+    });
+
+  function filterProducts() {
+    const search = document
+      .getElementById("product-search")
+      .value.toLowerCase();
+    const category = document.getElementById("category-filter").value;
+    const cards = document.querySelectorAll(".product-card");
+
+    cards.forEach((card) => {
+      const name = card.dataset.name.toLowerCase();
+      const cardCategory = card.dataset.category;
+
+      const matchesSearch = name.includes(search);
+      const matchesCategory = !category || cardCategory === category;
+
+      if (matchesSearch && matchesCategory) {
+        card.style.display = "block";
+      } else {
+        card.style.display = "none";
+      }
+    });
+  }
+
+  function clearFilters() {
+    document.getElementById("product-search").value = "";
+    document.getElementById("category-filter").value = "";
     filterProducts();
-}
+  }
 
-// Get CSRF token
-function getCookie(name) {
+  // Get CSRF token
+  function getCookie(name) {
     let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
+    if (document.cookie && document.cookie !== "") {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === name + "=") {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
         }
+      }
     }
     return cookieValue;
-}
+  }
 </script>
 {% endblock %}
-
-{% load static %}
-{% load i18n %}
-{% load crispy_forms_tags %}
-{% load humanize %}
