@@ -121,9 +121,9 @@ def customer_list(request):
     
     if search_query:
         customers = customers.filter(
-            Q(name__icontains=search_query) |
-            Q(phone__icontains=search_query) |
-            Q(email__icontains=search_query)
+            Q(name__icontains=search_query) ,
+            Q(phone__icontains=search_query) ,
+            Q(email__icontains=search_query),
         )
     
     paginator = Paginator(customers, 10)
