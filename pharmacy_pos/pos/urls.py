@@ -33,4 +33,5 @@ urlpatterns = [
     
     # Reports URLs
     path('reports/sales/', views.sales_report, name='sales_report'),
+    path('receipt/<int:sale_id>/', views.receipt, name='receipt'),
 ]

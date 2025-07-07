@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Receipt - Sale #{{ sale.id }}{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto bg-white shadow rounded p-6 mt-8 printable-receipt">
+    <h2 class="text-2xl font-bold mb-2 text-center">Pharmacy POS Receipt</h2>
+    <div class="mb-4 text-center text-gray-600">Sale #{{ sale.id }}<br>Date: {{ sale.sale_date }}</div>
+    <div class="mb-2">
+        <strong>Customer:</strong> {{ sale.customer|default:"Walk-in Customer" }}<br>
+        <strong>Payment Method:</strong> {{ sale.payment_method|title }}
+    </div>
+    <hr class="my-2">
+    <table class="w-full text-sm mb-4">
+        <thead>
+            <tr class="border-b">
+                <th class="text-left py-1">Item</th>
+                <th class="text-right py-1">Qty</th>
+                <th class="text-right py-1">Unit Price</th>
+                <th class="text-right py-1">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in sale_items %}
+            <tr>
+                <td class="py-1">{{ item.medicine.name }}</td>
+                <td class="text-right py-1">{{ item.quantity }}</td>
+                <td class="text-right py-1">Ksh {{ item.unit_price }}</td>
+                <td class="text-right py-1">Ksh {{ item.total_price }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <hr class="my-2">
+    <div class="flex justify-between mb-1">
+        <span>Subtotal:</span>
+        <span>Ksh {{ sale.total_amount|add:sale.discount|floatformat:2 }}</span>
+    </div>
+    <div class="flex justify-between mb-1">
+        <span>Discount:</span>
+        <span>Ksh {{ sale.discount|floatformat:2 }}</span>
+    </div>
+    <div class="flex justify-between mb-1">
+        <span>Tax:</span>
+        <span>Ksh {{ sale.tax|floatformat:2 }}</span>
+    </div>
+    <div class="flex justify-between font-bold text-lg">
+        <span>Total:</span>
+        <span>Ksh {{ sale.total_amount|floatformat:2 }}</span>
+    </div>
+    <div class="text-center mt-6 text-xs text-gray-500">Thank you for your purchase!</div>
+    <div class="text-center mt-4">
+        <button onclick="window.print()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Print Receipt</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+@media print {
+  body * { visibility: hidden !important; }
+  .printable-receipt, .printable-receipt * { visibility: visible !important; }
+  .printable-receipt { position: absolute; left: 0; top: 0; width: 100vw; background: white; box-shadow: none; }
+  button, .no-print { display: none !important; }
+}
+</style>
+{% endblock %} 

@@ -10,6 +10,8 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from .models import *
 from .forms import *
+from django.views.decorators.csrf import csrf_exempt
+import json
 
 def login_view(request):
     if request.method == 'POST':
@@ -157,37 +159,52 @@ def pos_sale(request):
         'customers': customers
     })
 
+@csrf_exempt
 @login_required
 def process_sale(request):
     if request.method == 'POST':
-        customer_id = request.POST.get('customer_id')
-        payment_method = request.POST.get('payment_method', 'cash')
-        discount = float(request.POST.get('discount', 0))
-        tax = float(request.POST.get('tax', 0))
-        
-        # Create sale
-        sale = Sale.objects.create(
-            customer_id=customer_id if customer_id else None,
-            payment_method=payment_method,
-            discount=discount,
-            tax=tax,
-            served_by=request.user
-        )
-        
-        total_amount = 0
-        
-        # Process sale items
-        for key, value in request.POST.items():
-            if key.startswith('medicine_'):
-                medicine_id = key.split('_')[1]
-                quantity = int(value)
-                
-                if quantity > 0:
+        try:
+            if request.content_type == 'application/json':
+                data = json.loads(request.body)
+                customer_id = data.get('customer_id')
+                payment_method = data.get('payment_method', 'cash')
+                discount = float(data.get('discount_percent', 0))
+                tax = float(data.get('tax_percent', 0))
+                items = data.get('items', [])
+            else:
+                customer_id = request.POST.get('customer_id')
+                payment_method = request.POST.get('payment_method', 'cash')
+                discount = float(request.POST.get('discount', 0))
+                tax = float(request.POST.get('tax', 0))
+                items = []
+                for key, value in request.POST.items():
+                    if key.startswith('medicine_'):
+                        medicine_id = key.split('_')[1]
+                        quantity = int(value)
+                        if quantity > 0:
+                            items.append({
+                                'medicine_id': medicine_id,
+                                'quantity': quantity
+                            })
+            # Create sale
+            sale = Sale.objects.create(
+                customer_id=customer_id if customer_id else None,
+                payment_method=payment_method,
+                discount=discount,
+                tax=tax,
+                served_by=request.user
+            )
+            total_amount = 0
+            # Process sale items
+            for item in items:
+                medicine_id = item.get('medicine_id')
+                quantity = int(item.get('quantity', 0))
+                unit_price = float(item.get('unit_price', 0)) if 'unit_price' in item else None
+                if quantity > 0 and medicine_id:
                     medicine = Medicine.objects.get(id=medicine_id)
-                    unit_price = medicine.price
+                    if unit_price is None:
+                        unit_price = float(medicine.selling_price)
                     total_price = quantity * unit_price
-                    
-                    # Create sale item
                     SaleItem.objects.create(
                         sale=sale,
                         medicine=medicine,
@@ -195,17 +212,13 @@ def process_sale(request):
                         unit_price=unit_price,
                         total_price=total_price
                     )
-                    
                     total_amount += total_price
-        
-        # Update sale total
-        sale.total_amount = total_amount - discount + tax
-        sale.save()
-        
-        messages.success(request, f'Sale completed successfully! Sale ID: {sale.id}')
-        return redirect('pos_sale')
-    
-    return redirect('pos_sale')
+            sale.total_amount = total_amount - discount + tax
+            sale.save()
+            return JsonResponse({'success': True, 'sale_id': sale.id})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
 
 # Inventory Views
 @login_required
@@ -280,3 +293,12 @@ def sales_report(request):
     sales = paginator.get_page(page)
     
     return render(request, 'pos/sales_report.html', {'sales': sales})
+
+@login_required
+def receipt(request, sale_id):
+    sale = get_object_or_404(Sale, id=sale_id)
+    sale_items = sale.items.all()
+    return render(request, 'pos/receipt.html', {
+        'sale': sale,
+        'sale_items': sale_items,
+    })
