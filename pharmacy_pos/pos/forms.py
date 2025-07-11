@@ -3,6 +3,8 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from .models import *
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Layout, Field, Submit, Row, Column
 
 class CustomUserCreationForm(UserCreationForm):
     email = forms.EmailField(required=True)
@@ -41,6 +43,23 @@ class CustomerForm(forms.ModelForm):
     class Meta:
         model = Customer
         fields = ['name', 'phone', 'email', 'address']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            Row(
+                Column('name', css_class='form-group col-md-6 mb-0'),
+                Column('phone', css_class='form-group col-md-6 mb-0'),
+                css_class='form-row'
+            ),
+            Row(
+                Column('email', css_class='form-group col-md-6 mb-0'),
+                Column('address', css_class='form-group col-md-6 mb-0'),
+                css_class='form-row'
+            ),
+        )
 
 class InventoryForm(forms.ModelForm):
     class Meta:

@@ -2,13 +2,14 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import permission_required
 from django.contrib import messages
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, F
 from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .models import *
+from .models import Medicine, Inventory, Customer, Sale, Supplier, Order, Category
 from .forms import *
 from django.views.decorators.csrf import csrf_exempt
 import json
@@ -31,22 +32,20 @@ def dashboard(request):
     total_medicines = Medicine.objects.filter(is_active=True).count()
     total_customers = Customer.objects.count()
     total_suppliers = Supplier.objects.filter(is_active=True).count()
-    
-    # Sales statistics
     today = timezone.now().date()
     today_sales = Sale.objects.filter(sale_date__date=today).aggregate(
         total=Sum('total_amount')
     )['total'] or 0
-    
     # Low stock items (less than 10 units)
     low_stock = Medicine.objects.filter(
         inventory__quantity__lt=10,
         is_active=True
     ).distinct()
-    
     # Recent sales
     recent_sales = Sale.objects.order_by('-sale_date')[:5]
-    
+    # Expiry logic
+    expired = Inventory.objects.filter(expiry_date__lt=today)
+    close_to_expiry = Inventory.objects.filter(expiry_date__gte=today, expiry_date__lte=today + timedelta(days=30))
     context = {
         'total_medicines': total_medicines,
         'total_customers': total_customers,
@@ -54,6 +53,8 @@ def dashboard(request):
         'today_sales': today_sales,
         'low_stock': low_stock,
         'recent_sales': recent_sales,
+        'expired': expired,
+        'close_to_expiry': close_to_expiry,
     }
     return render(request, 'pos/dashboard.html', context)
 
@@ -119,7 +120,7 @@ def medicine_edit(request, pk):
 @login_required
 def customer_list(request):
     search_query = request.GET.get('search', '')
-    customers = Customer.objects.all()
+    customers = Customer.objects.all().order_by('name')
     
     if search_query:
         customers = customers.filter(
@@ -223,7 +224,7 @@ def process_sale(request):
 # Inventory Views
 @login_required
 def inventory_list(request):
-    inventories = Inventory.objects.select_related('medicine').all()
+    inventories = Inventory.objects.select_related('medicine').all().order_by('medicine__name')
     return render(request, 'pos/inventory_list.html', {'inventories': inventories})
 
 @login_required
@@ -259,7 +260,7 @@ def category_add(request):
 # Supplier Views
 @login_required
 def supplier_list(request):
-    suppliers = Supplier.objects.filter(is_active=True)
+    suppliers = Supplier.objects.filter(is_active=True).order_by('name')
     return render(request, 'pos/supplier_list.html', {'suppliers': suppliers})
 
 @login_required
@@ -278,21 +279,20 @@ def supplier_add(request):
 @login_required
 def sales_report(request):
     sales = Sale.objects.order_by('-sale_date')
-    
     # Filter by date range if provided
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
-    
+    payment_method = request.GET.get('payment_method')  # new
     if start_date:
         sales = sales.filter(sale_date__date__gte=start_date)
     if end_date:
         sales = sales.filter(sale_date__date__lte=end_date)
-    
+    if payment_method:
+        sales = sales.filter(payment_method=payment_method)
     paginator = Paginator(sales, 10)
     page = request.GET.get('page')
     sales = paginator.get_page(page)
-    
-    return render(request, 'pos/sales_report.html', {'sales': sales})
+    return render(request, 'pos/sales_report.html', {'sales': sales, 'payment_method': payment_method})
 
 @login_required
 def receipt(request, sale_id):
@@ -302,3 +302,133 @@ def receipt(request, sale_id):
         'sale': sale,
         'sale_items': sale_items,
     })
+
+@login_required
+def inventory_report(request):
+    # Filters
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    category_id = request.GET.get('category')
+    medicine_id = request.GET.get('medicine')
+    expiry_status = request.GET.get('expiry_status')  # new
+    inventories = Inventory.objects.select_related('medicine', 'medicine__category')
+    if start_date:
+        inventories = inventories.filter(expiry_date__gte=start_date)
+    if end_date:
+        inventories = inventories.filter(expiry_date__lte=end_date)
+    if category_id:
+        inventories = inventories.filter(medicine__category_id=category_id)
+    if medicine_id:
+        inventories = inventories.filter(medicine_id=medicine_id)
+    if expiry_status == 'expired':
+        inventories = inventories.filter(expiry_date__lt=timezone.now().date())
+    elif expiry_status == 'close':
+        inventories = inventories.filter(expiry_date__gte=timezone.now().date(), expiry_date__lte=timezone.now().date() + timedelta(days=30))
+    # Aggregation: total stock per medicine
+    stock_summary = inventories.values('medicine__name').annotate(
+        total_stock=Sum('quantity')
+    ).order_by('-total_stock')
+    # Low stock
+    low_stock = inventories.filter(quantity__lt=10)
+    context = {
+        'stock_summary': list(stock_summary),
+        'low_stock': low_stock,
+        'inventories': inventories,
+        'expiry_status': expiry_status,
+    }
+    return render(request, 'pos/inventory_report.html', context)
+
+@login_required
+def customer_report(request):
+    # Filters
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    customer_id = request.GET.get('customer')
+
+    customers = Customer.objects.all()
+    sales = Sale.objects.select_related('customer').all()
+    if start_date:
+        sales = sales.filter(sale_date__date__gte=start_date)
+    if end_date:
+        sales = sales.filter(sale_date__date__lte=end_date)
+    if customer_id:
+        sales = sales.filter(customer_id=customer_id)
+
+    # Aggregation: total sales per customer
+    customer_summary = sales.values('customer__name').annotate(
+        total_sales=Sum('total_amount'),
+        num_purchases=Count('id')
+    ).order_by('-total_sales')
+
+    context = {
+        'customer_summary': list(customer_summary),
+        'customers': customers,
+        'sales': sales,
+    }
+    return render(request, 'pos/customer_report.html', context)
+
+@login_required
+def supplier_report(request):
+    # Filters
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    supplier_id = request.GET.get('supplier')
+
+    suppliers = Supplier.objects.all()
+    orders = Order.objects.select_related('supplier').all()
+    if start_date:
+        orders = orders.filter(order_date__gte=start_date)
+    if end_date:
+        orders = orders.filter(order_date__lte=end_date)
+    if supplier_id:
+        orders = orders.filter(supplier_id=supplier_id)
+
+    # Aggregation: total purchases per supplier
+    supplier_summary = orders.values('supplier__name').annotate(
+        total_purchases=Sum('total_amount'),
+        num_orders=Count('id')
+    ).order_by('-total_purchases')
+
+    context = {
+        'supplier_summary': list(supplier_summary),
+        'suppliers': suppliers,
+        'orders': orders,
+    }
+    return render(request, 'pos/supplier_report.html', context)
+
+@permission_required('pos.view_financial_report', raise_exception=True)
+def financial_report(request):
+    # Filters
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    cashier_id = request.GET.get('cashier')
+
+    sales = Sale.objects.select_related('served_by').all()
+    if start_date:
+        sales = sales.filter(sale_date__date__gte=start_date)
+    if end_date:
+        sales = sales.filter(sale_date__date__lte=end_date)
+    if cashier_id:
+        sales = sales.filter(served_by_id=cashier_id)
+
+    # Aggregation: total revenue, total tax, total discount
+    total_revenue = sales.aggregate(total=Sum('total_amount'))['total'] or 0
+    total_tax = sales.aggregate(total=Sum('tax'))['total'] or 0
+    total_discount = sales.aggregate(total=Sum('discount'))['total'] or 0
+    num_sales = sales.count()
+
+    # Revenue by cashier
+    cashier_summary = sales.values('served_by__username').annotate(
+        total_sales=Sum('total_amount'),
+        num_sales=Count('id')
+    ).order_by('-total_sales')
+
+    context = {
+        'total_revenue': total_revenue,
+        'total_tax': total_tax,
+        'total_discount': total_discount,
+        'num_sales': num_sales,
+        'cashier_summary': list(cashier_summary),
+        'sales': sales,
+    }
+    return render(request, 'pos/financial_report.html', context)

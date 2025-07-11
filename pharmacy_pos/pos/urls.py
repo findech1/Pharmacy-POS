@@ -33,5 +33,9 @@ urlpatterns = [
     
     # Reports URLs
     path('reports/sales/', views.sales_report, name='sales_report'),
+    path('reports/inventory/', views.inventory_report, name='inventory_report'),
+    path('reports/customers/', views.customer_report, name='customer_report'),
+    path('reports/suppliers/', views.supplier_report, name='supplier_report'),
+    path('reports/financial/', views.financial_report, name='financial_report'),
     path('receipt/<int:sale_id>/', views.receipt, name='receipt'),
 ]

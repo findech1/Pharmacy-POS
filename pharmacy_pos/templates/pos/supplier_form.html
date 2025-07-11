@@ -66,3 +66,15 @@
     }
 </style>
 {% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/form-validation.js"></script>
+<script>
+    window.addEventListener('DOMContentLoaded', function() {
+        window.applyFormValidation && window.applyFormValidation({
+            required: ['#id_name', '#id_contact_number'],
+            email: ['#id_email']
+        });
+    });
+</script>
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load crispy_forms_tags %}
 
 {% block title %}{% if customer.id %}Edit Customer{% else %}Add Customer{% endif %} - Pharmacy POS{% endblock %}
 {% block page_title %}{% if customer.id %}Edit Customer{% else %}Add New Customer{% endif %}{% endblock %}
@@ -10,15 +11,7 @@
         <h1 class="text-2xl font-bold mb-6 text-gray-800">{{ form_title }}</h1>
         <form method="post" class="space-y-4">
             {% csrf_token %}
-            {% for field in form %}
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">{{ field.label }}</label>
-                {{ field }}
-                {% if field.errors %}
-                    <p class="text-red-600 text-sm mt-1">{{ field.errors.0 }}</p>
-                {% endif %}
-            </div>
-            {% endfor %}
+            {{ form|crispy }}
             <div class="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
                 <a href="{% url 'customer_list' %}" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Cancel</a>
                 <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><i class="fas fa-save mr-2"></i>Save</button>
@@ -29,48 +22,14 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="/static/js/form-validation.js"></script>
 <script>
-// Auto-format phone number
-document.getElementById('{{ form.phone.id_for_label }}').addEventListener('input', function(e) {
-    let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
-    
-    // If it starts with 07 or 01, add +254 prefix
-    if (value.startsWith('07') || value.startsWith('01')) {
-        value = '254' + value.substring(1);
-    }
-    
-    // Add + prefix if not present and has country code
-    if (value.length >= 10 && !value.startsWith('+')) {
-        value = '+' + value;
-    }
-    
-    e.target.value = value;
-});
-
-// Form validation
-document.querySelector('form').addEventListener('submit', function(e) {
-    const phone = document.getElementById('{{ form.phone.id_for_label }}').value;
-    const name = document.getElementById('{{ form.name.id_for_label }}').value;
-    
-    if (!name.trim()) {
-        alert('Customer name is required');
-        e.preventDefault();
-        return;
-    }
-    
-    if (!phone.trim()) {
-        alert('Phone number is required');
-        e.preventDefault();
-        return;
-    }
-    
-    // Basic phone validation
-    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-    if (!phoneRegex.test(phone.replace(/\s/g, ''))) {
-        alert('Please enter a valid phone number');
-        e.preventDefault();
-        return;
-    }
-});
+    window.addEventListener('DOMContentLoaded', function() {
+        window.applyFormValidation && window.applyFormValidation({
+            required: ['#id_name', '#id_phone'],
+            email: ['#id_email'],
+            phone: ['#id_phone']
+        });
+    });
 </script>
 {% endblock %}

@@ -39,4 +39,15 @@
         min-height: 80px;
     }
 </style>
+{% block extra_js %}
+<script src="/static/js/form-validation.js"></script>
+<script>
+    window.addEventListener('DOMContentLoaded', function() {
+        window.applyFormValidation && window.applyFormValidation({
+            required: ['#id_username', '#id_email', '#id_password1', '#id_password2'],
+            email: ['#id_email']
+        });
+    });
+</script>
+{% endblock %}
 {% endblock %}

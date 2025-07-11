@@ -1,0 +1,104 @@
+{% extends 'reports_base.html' %}
+{% block report_content %}
+<div class="max-w-6xl mx-auto p-4">
+    <h2 class="text-2xl font-bold mb-4 text-blue-800">Inventory Report</h2>
+    <!-- Filters: Date range, medicine, category -->
+    <div id="inventory-filters" class="mb-6">
+        <form method="get" class="flex flex-wrap gap-4 items-end">
+            <!-- Existing filters here -->
+            <label class="block">
+                <span class="text-sm">Expiry Status</span>
+                <select name="expiry_status" class="border rounded px-2 py-1">
+                    <option value="">All</option>
+                    <option value="expired" {% if expiry_status == 'expired' %}selected{% endif %}>Expired</option>
+                    <option value="close" {% if expiry_status == 'close' %}selected{% endif %}>Close to Expiry (30d)</option>
+                </select>
+            </label>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Filter</button>
+        </form>
+    </div>
+    <!-- Chart placeholder -->
+    <div id="inventory-chart" class="mb-6"></div>
+    <div class="mb-6">
+        <canvas id="inventory-summary-chart" height="80"></canvas>
+        <button onclick="exportInventoryCSV()" class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export to CSV</button>
+    </div>
+    <!-- Table placeholder -->
+    <table class="min-w-full mt-6 border">
+        <thead>
+            <tr>
+                <th class="px-4 py-2">Medicine</th>
+                <th class="px-4 py-2">Quantity</th>
+                <th class="px-4 py-2">Expiry Date</th>
+                <th class="px-4 py-2">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inv in inventories %}
+            <tr>
+                <td class="px-4 py-2">{{ inv.medicine.name }}</td>
+                <td class="px-4 py-2">{{ inv.quantity }}</td>
+                <td class="px-4 py-2">{{ inv.expiry_date }}</td>
+                <td class="px-4 py-2">
+                    {% if inv.expiry_date < today %}
+                        <span class="text-red-600">Expired</span>
+                    {% elif inv.expiry_date <= today_plus_30 %}
+                        <span class="text-yellow-600">Close</span>
+                    {% else %}
+                        <span class="text-green-600">OK</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-gray-400">No inventory found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/chart.min.js"></script>
+<script>
+// Prepare data for chart
+const inventoryData = [
+    {% for item in stock_summary %}
+        { name: "{{ item.medicine__name }}", total: {{ item.total_stock }} },
+    {% endfor %}
+];
+const invLabels = inventoryData.map(i => i.name);
+const invData = inventoryData.map(i => i.total);
+const ctx = document.getElementById('inventory-summary-chart').getContext('2d');
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: invLabels,
+        datasets: [{
+            label: 'Stock',
+            data: invData,
+            backgroundColor: 'rgba(234, 179, 8, 0.7)'
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } }
+    }
+});
+// Export to CSV
+function exportInventoryCSV() {
+    let csv = 'Medicine,Quantity,Expiry Date,Status\n';
+    {% for inv in inventories %}
+    csv += '{{ inv.medicine.name }}',
+        + ',{{ inv.quantity }}',
+        + ',{{ inv.expiry_date }}',
+        + ',{% if inv.expiry_date < today %}Expired{% elif inv.expiry_date <= today_plus_30 %}Close{% else %}OK{% endif %}' + '\n';
+    {% endfor %}
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventory_report.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %} 

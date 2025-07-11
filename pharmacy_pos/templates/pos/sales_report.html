@@ -1,10 +1,9 @@
-{% extends 'base.html' %}
-{% block header %}Sales Report{% endblock %}
-{% block content %}
+{% extends 'reports_base.html' %}
+{% block report_content %}
 <div class="max-w-6xl mx-auto p-4">
     <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
         <h2 class="text-2xl font-bold mb-4 text-blue-800">Sales Report</h2>
-        <form method="get" class="flex flex-col md:flex-row items-end gap-4 mb-6">
+        <form method="get" class="flex flex-wrap gap-4 items-end mb-4">
             <div>
                 <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                 <input type="date" id="start_date" name="start_date" value="{{ request.GET.start_date|default:'' }}" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
@@ -13,31 +12,46 @@
                 <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
                 <input type="date" id="end_date" name="end_date" value="{{ request.GET.end_date|default:'' }}" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
             </div>
-            <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">Filter</button>
+            <label class="block">
+                <span class="text-sm">Payment Method</span>
+                <select name="payment_method" class="border rounded px-2 py-1">
+                    <option value="">All</option>
+                    <option value="cash" {% if payment_method == 'cash' %}selected{% endif %}>Cash</option>
+                    <option value="card" {% if payment_method == 'card' %}selected{% endif %}>Card</option>
+                    <option value="mobile" {% if payment_method == 'mobile' %}selected{% endif %}>Mobile Money</option>
+                </select>
+            </label>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Filter</button>
             {% if request.GET.start_date or request.GET.end_date %}
             <a href="?" class="ml-2 text-sm text-gray-500 hover:underline">Clear</a>
             {% endif %}
         </form>
+        <div class="mb-6">
+            <canvas id="sales-summary-chart" height="80"></canvas>
+            <button onclick="exportSalesCSV()" class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export to CSV</button>
+        </div>
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
+            <table class="min-w-full mt-6 border">
+                <thead>
                     <tr>
-                        <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                        <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                        <th class="px-4 py-2">Sale ID</th>
+                        <th class="px-4 py-2">Date</th>
+                        <th class="px-4 py-2">Customer</th>
+                        <th class="px-4 py-2">Total</th>
+                        <th class="px-4 py-2">Payment Method</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody>
                     {% for sale in sales %}
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap">{{ sale.sale_date }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">{{ sale.customer|default:"Walk-in Customer" }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap font-bold text-green-700">Ksh {{ sale.total_amount|floatformat:2 }}</td>
+                        <td class="px-4 py-2">{{ sale.id }}</td>
+                        <td class="px-4 py-2">{{ sale.sale_date|date:'Y-m-d H:i' }}</td>
+                        <td class="px-4 py-2">{{ sale.customer }}</td>
+                        <td class="px-4 py-2">{{ sale.total_amount }}</td>
+                        <td class="px-4 py-2">{{ sale.get_payment_method_display }}</td>
                     </tr>
                     {% empty %}
-                    <tr>
-                        <td colspan="3" class="px-6 py-4 text-center text-gray-500">No sales found.</td>
-                    </tr>
+                    <tr><td colspan="5" class="text-center text-gray-400">No sales found.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -72,7 +86,14 @@
 {% block extra_js %}
 <!-- Chart.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Flatpickr CDN for date picker -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="/static/js/chart.min.js"></script>
 <script>
+// Initialize flatpickr on date fields
+flatpickr("#start_date", { dateFormat: "Y-m-d" });
+flatpickr("#end_date", { dateFormat: "Y-m-d" });
 // Example data, replace with real data from backend if available
 const fastMovingData = {
     labels: ["Panadol", "Abacavir", "Ampiclox", "Duphaston"],
@@ -110,5 +131,54 @@ new Chart(slowMovingCtx, {
         scales: { y: { beginAtZero: true } }
     }
 });
+// Prepare data for chart
+const salesData = [
+    {% for sale in sales %}
+        { date: "{{ sale.sale_date|date:'Y-m-d' }}", total: {{ sale.total_amount|floatformat:2 }} },
+    {% endfor %}
+];
+// Group by date
+const salesByDate = {};
+salesData.forEach(s => {
+    if (!salesByDate[s.date]) salesByDate[s.date] = 0;
+    salesByDate[s.date] += s.total;
+});
+const chartLabels = Object.keys(salesByDate);
+const chartData = Object.values(salesByDate);
+// Render chart
+const ctx = document.getElementById('sales-summary-chart').getContext('2d');
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: chartLabels,
+        datasets: [{
+            label: 'Total Sales',
+            data: chartData,
+            backgroundColor: 'rgba(37, 99, 235, 0.7)'
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } }
+    }
+});
+// Export to CSV
+function exportSalesCSV() {
+    let csv = 'Sale ID,Date,Customer,Total,Payment Method\n';
+    {% for sale in sales %}
+    csv += '{{ sale.id }}',
+        + ',{{ sale.sale_date|date:'Y-m-d H:i' }}',
+        + ',{{ sale.customer|default:"Walk-in Customer" }}',
+        + ',{{ sale.total_amount|floatformat:2 }}',
+        + ',{{ sale.get_payment_method_display }}' + '\n';
+    {% endfor %}
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sales_report.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
 </script>
 {% endblock %}
