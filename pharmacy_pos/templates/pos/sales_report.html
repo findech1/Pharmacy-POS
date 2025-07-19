@@ -164,13 +164,16 @@ new Chart(ctx, {
 });
 // Export to CSV
 function exportSalesCSV() {
-    let csv = 'Sale ID,Date,Customer,Total,Payment Method\n';
+    let csv = 'Sale ID,Date,Customer,Cashier,Total,Payment Method,Items\n';
     {% for sale in sales %}
-    csv += '{{ sale.id }}',
-        + ',{{ sale.sale_date|date:'Y-m-d H:i' }}',
-        + ',{{ sale.customer|default:"Walk-in Customer" }}',
-        + ',{{ sale.total_amount|floatformat:2 }}',
-        + ',{{ sale.get_payment_method_display }}' + '\n';
+    let items = `{% for item in sale.items.all %}{{ item.medicine.name }} x{{ item.quantity }} @{{ item.unit_price }}{% if not forloop.last %}; {% endif %}{% endfor %}`;
+    csv += '{{ sale.id }}'
+        + ',{{ sale.sale_date|date:"Y-m-d H:i" }}'
+        + ',{{ sale.customer|default:"Walk-in Customer" }}'
+        + ',{{ sale.served_by.username }}'
+        + ',{{ sale.total_amount|floatformat:2 }}'
+        + ',{{ sale.get_payment_method_display }}'
+        + ',"' + items + '"\\n';
     {% endfor %}
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

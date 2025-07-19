@@ -44,11 +44,13 @@ new Chart(ctx, {
 });
 // Export to CSV
 function exportFinancialCSV() {
-    let csv = 'Cashier,Total Sales,Number of Sales\n';
+    let csv = 'Cashier,Total Sales,Number of Sales,Total Tax,Total Discount\n';
     {% for item in cashier_summary %}
-    csv += '{{ item.served_by__username }}',
-        + ',{{ item.total_sales|floatformat:2 }}',
-        + ',{{ item.num_sales }}' + '\n';
+    csv += '{{ item.served_by__username }}'
+        + ',{{ item.total_sales|floatformat:2 }}'
+        + ',{{ item.num_sales }}'
+        + ',{{ total_tax|floatformat:2 }}'
+        + ',{{ total_discount|floatformat:2 }}\\n';
     {% endfor %}
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

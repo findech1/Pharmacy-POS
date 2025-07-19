@@ -116,8 +116,25 @@ class SaleItem(models.Model):
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
 
     def save(self, *args, **kwargs):
+        from django.db import transaction
         self.total_price = self.quantity * self.unit_price
-        super().save(*args, **kwargs)
+        is_new = self._state.adding
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if is_new:
+                # Reduce quantity from the latest (non-expired) inventory batches
+                qty_to_deduct = self.quantity
+                inventories = Inventory.objects.filter(medicine=self.medicine, quantity__gt=0, expiry_date__gte=models.functions.Now()).order_by('expiry_date')
+                for inv in inventories:
+                    if qty_to_deduct <= 0:
+                        break
+                    deduct = min(inv.quantity, qty_to_deduct)
+                    inv.quantity -= deduct
+                    inv.save()
+                    qty_to_deduct -= deduct
+                # Optionally, handle if not enough stock
+                if qty_to_deduct > 0:
+                    raise ValueError(f"Not enough stock for {self.medicine.name}")
 
     def __str__(self):
         return f"{self.medicine.name} x {self.quantity}"

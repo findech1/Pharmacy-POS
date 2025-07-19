@@ -43,11 +43,15 @@ new Chart(ctx, {
 });
 // Export to CSV
 function exportCustomerCSV() {
-    let csv = 'Customer,Total Sales,Number of Purchases\n';
+    let csv = 'Customer,Email,Phone,Total Sales,Number of Purchases\n';
     {% for item in customer_summary %}
-    csv += '{{ item.customer__name }}',
-        + ',{{ item.total_sales|floatformat:2 }}',
-        + ',{{ item.num_purchases }}' + '\n';
+    {% for c in customers %}{% if c.name == item.customer__name %}
+    csv += '{{ item.customer__name }}'
+        + ',{{ c.email }}'
+        + ',{{ c.phone }}'
+        + ',{{ item.total_sales|floatformat:2 }}'
+        + ',{{ item.num_purchases }}\\n';
+    {% endif %}{% endfor %}
     {% endfor %}
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

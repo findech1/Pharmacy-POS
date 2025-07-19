@@ -43,11 +43,15 @@ new Chart(ctx, {
 });
 // Export to CSV
 function exportSupplierCSV() {
-    let csv = 'Supplier,Total Purchases,Number of Orders\n';
+    let csv = 'Supplier,Email,Contact,Total Purchases,Number of Orders\n';
     {% for item in supplier_summary %}
-    csv += '{{ item.supplier__name }}',
-        + ',{{ item.total_purchases|floatformat:2 }}',
-        + ',{{ item.num_orders }}' + '\n';
+    {% for s in suppliers %}{% if s.name == item.supplier__name %}
+    csv += '{{ item.supplier__name }}'
+        + ',{{ s.email }}'
+        + ',{{ s.contact_number }}'
+        + ',{{ item.total_purchases|floatformat:2 }}'
+        + ',{{ item.num_orders }}\\n';
+    {% endif %}{% endfor %}
     {% endfor %}
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

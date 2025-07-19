@@ -85,12 +85,15 @@ new Chart(ctx, {
 });
 // Export to CSV
 function exportInventoryCSV() {
-    let csv = 'Medicine,Quantity,Expiry Date,Status\n';
+    let csv = 'Medicine,Category,Quantity,Expiry Date,Batch Number,Cost Price,Status\n';
     {% for inv in inventories %}
-    csv += '{{ inv.medicine.name }}',
-        + ',{{ inv.quantity }}',
-        + ',{{ inv.expiry_date }}',
-        + ',{% if inv.expiry_date < today %}Expired{% elif inv.expiry_date <= today_plus_30 %}Close{% else %}OK{% endif %}' + '\n';
+    csv += '{{ inv.medicine.name }}'
+        + ',{{ inv.medicine.category.name }}'
+        + ',{{ inv.quantity }}'
+        + ',{{ inv.expiry_date }}'
+        + ',{{ inv.batch_number }}'
+        + ',{{ inv.cost_price }}'
+        + ',{% if inv.expiry_date < today %}Expired{% elif inv.expiry_date <= today_plus_30 %}Close{% else %}OK{% endif %}' + '\\n';
     {% endfor %}
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
