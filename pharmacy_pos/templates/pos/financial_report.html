@@ -1,64 +1,69 @@
-{% extends 'reports_base.html' %}
-{% block report_content %}
+{% extends 'reports_base.html' %} {% block report_content %}
 <div class="max-w-6xl mx-auto p-4">
-    <h2 class="text-2xl font-bold mb-4 text-blue-800">Financial Report</h2>
-    <div class="mb-4 text-red-600">Restricted: Only authorized users can view this report.</div>
-    <!-- Filters: Date range, cashier, etc. -->
-    <div id="financial-filters" class="mb-6"></div>
-    <!-- Chart placeholder -->
-    <div id="financial-chart" class="mb-6"></div>
-    <!-- Table placeholder -->
-    <div id="financial-table"></div>
-    <div class="mb-6">
-        <canvas id="financial-summary-chart" height="80"></canvas>
-        <button onclick="exportFinancialCSV()" class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export to CSV</button>
-    </div>
+  <h2 class="text-2xl font-bold mb-4 text-blue-800">Financial Report</h2>
+  <div class="mb-4 text-red-600">
+    Restricted: Only authorized users can view this report.
+  </div>
+  <!-- Filters: Date range, cashier, etc. -->
+  <div id="financial-filters" class="mb-6"></div>
+  <!-- Chart placeholder -->
+  <div id="financial-chart" class="mb-6"></div>
+  <!-- Table placeholder -->
+  <div id="financial-table"></div>
+  <div class="mb-6">
+    <canvas id="financial-summary-chart" height="80"></canvas>
+    <button
+      onclick="exportFinancialCSV()"
+      class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+    >
+      Export to CSV
+    </button>
+  </div>
 </div>
-{% endblock %}
-{% block extra_js %}
+{% endblock %} {% block extra_js %}
 <script src="/static/js/chart.min.js"></script>
 <script>
-// Prepare data for chart
-const cashierData = [
-    {% for item in cashier_summary %}
-        { name: "{{ item.served_by__username }}", total: {{ item.total_sales|floatformat:2 }} },
-    {% endfor %}
-];
-const cashierLabels = cashierData.map(i => i.name);
-const cashierTotals = cashierData.map(i => i.total);
-const ctx = document.getElementById('financial-summary-chart').getContext('2d');
-new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: cashierLabels,
-        datasets: [{
-            label: 'Total Sales',
-            data: cashierTotals,
-            backgroundColor: 'rgba(239, 68, 68, 0.7)'
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } }
-    }
-});
-// Export to CSV
-function exportFinancialCSV() {
-    let csv = 'Cashier,Total Sales,Number of Sales,Total Tax,Total Discount\n';
-    {% for item in cashier_summary %}
-    csv += '{{ item.served_by__username }}'
-        + ',{{ item.total_sales|floatformat:2 }}'
-        + ',{{ item.num_sales }}'
-        + ',{{ total_tax|floatformat:2 }}'
-        + ',{{ total_discount|floatformat:2 }}\\n';
-    {% endfor %}
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'financial_report.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-}
+  // Prepare data for chart
+  const cashierData = [
+      {% for item in cashier_summary %}
+          { name: "{{ item.served_by__username }}", total: {{ item.total_sales|floatformat:2 }} },
+      {% endfor %}
+  ];
+  const cashierLabels = cashierData.map(i => i.name);
+  const cashierTotals = cashierData.map(i => i.total);
+  const ctx = document.getElementById('financial-summary-chart').getContext('2d');
+  new Chart(ctx, {
+      type: 'bar',
+      data: {
+          labels: cashierLabels,
+          datasets: [{
+              label: 'Total Sales',
+              data: cashierTotals,
+              backgroundColor: 'rgba(239, 68, 68, 0.7)'
+          }]
+      },
+      options: {
+          responsive: true,
+          plugins: { legend: { display: false } }
+      }
+  });
+  // Export to CSV
+  function exportFinancialCSV() {
+      let csv = 'Cashier,Total Sales,Number of Sales,Total Tax,Total Discount\n';
+      {% for item in cashier_summary %}
+      csv += '{{ item.served_by__username }}'
+          + ',{{ item.total_sales|floatformat:2 }}'
+          + ',{{ item.num_sales }}'
+          + ',{{ total_tax|floatformat:2 }}'
+          + ',{{ total_discount|floatformat:2 }}\\n';
+      {% endfor %}
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'financial_report.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+  }
 </script>
-{% endblock %} 
+{% endblock %}

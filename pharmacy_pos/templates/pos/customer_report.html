@@ -1,65 +1,68 @@
-{% extends 'reports_base.html' %}
-{% block report_content %}
+{% extends 'reports_base.html' %} {% block report_content %}
 <div class="max-w-6xl mx-auto p-4">
-    <h2 class="text-2xl font-bold mb-4 text-blue-800">Customer Report</h2>
-    <!-- Filters: Date range, customer -->
-    <div id="customer-filters" class="mb-6"></div>
-    <!-- Chart placeholder -->
-    <div id="customer-chart" class="mb-6"></div>
-    <div class="mb-6">
-        <canvas id="customer-summary-chart" height="80"></canvas>
-        <button onclick="exportCustomerCSV()" class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export to CSV</button>
-    </div>
-    <!-- Table placeholder -->
-    <div id="customer-table"></div>
+  <h2 class="text-2xl font-bold mb-4 text-blue-800">Customer Report</h2>
+  <!-- Filters: Date range, customer -->
+  <div id="customer-filters" class="mb-6"></div>
+  <!-- Chart placeholder -->
+  <div id="customer-chart" class="mb-6"></div>
+  <div class="mb-6">
+    <canvas id="customer-summary-chart" height="80"></canvas>
+    <button
+      onclick="exportCustomerCSV()"
+      class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+    >
+      Export to CSV
+    </button>
+  </div>
+  <!-- Table placeholder -->
+  <div id="customer-table"></div>
 </div>
-{% endblock %}
-{% block extra_js %}
+{% endblock %} {% block extra_js %}
 <script src="/static/js/chart.min.js"></script>
 <script>
-// Prepare data for chart
-const customerData = [
-    {% for item in customer_summary %}
-        { name: "{{ item.customer__name }}", total: {{ item.total_sales|floatformat:2 }} },
-    {% endfor %}
-];
-const custLabels = customerData.map(i => i.name);
-const custData = customerData.map(i => i.total);
-const ctx = document.getElementById('customer-summary-chart').getContext('2d');
-new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: custLabels,
-        datasets: [{
-            label: 'Total Sales',
-            data: custData,
-            backgroundColor: 'rgba(59, 130, 246, 0.7)'
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } }
-    }
-});
-// Export to CSV
-function exportCustomerCSV() {
-    let csv = 'Customer,Email,Phone,Total Sales,Number of Purchases\n';
-    {% for item in customer_summary %}
-    {% for c in customers %}{% if c.name == item.customer__name %}
-    csv += '{{ item.customer__name }}'
-        + ',{{ c.email }}'
-        + ',{{ c.phone }}'
-        + ',{{ item.total_sales|floatformat:2 }}'
-        + ',{{ item.num_purchases }}\\n';
-    {% endif %}{% endfor %}
-    {% endfor %}
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'customer_report.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-}
+  // Prepare data for chart
+  const customerData = [
+      {% for item in customer_summary %}
+          { name: "{{ item.customer__name }}", total: {{ item.total_sales|floatformat:2 }} },
+      {% endfor %}
+  ];
+  const custLabels = customerData.map(i => i.name);
+  const custData = customerData.map(i => i.total);
+  const ctx = document.getElementById('customer-summary-chart').getContext('2d');
+  new Chart(ctx, {
+      type: 'bar',
+      data: {
+          labels: custLabels,
+          datasets: [{
+              label: 'Total Sales',
+              data: custData,
+              backgroundColor: 'rgba(59, 130, 246, 0.7)'
+          }]
+      },
+      options: {
+          responsive: true,
+          plugins: { legend: { display: false } }
+      }
+  });
+  // Export to CSV
+  function exportCustomerCSV() {
+      let csv = 'Customer,Email,Phone,Total Sales,Number of Purchases\n';
+      {% for item in customer_summary %}
+      {% for c in customers %}{% if c.name == item.customer__name %}
+      csv += '{{ item.customer__name }}'
+          + ',{{ c.email }}'
+          + ',{{ c.phone }}'
+          + ',{{ item.total_sales|floatformat:2 }}'
+          + ',{{ item.num_purchases }}\\n';
+      {% endif %}{% endfor %}
+      {% endfor %}
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'customer_report.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+  }
 </script>
-{% endblock %} 
+{% endblock %}
