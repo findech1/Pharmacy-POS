@@ -1,69 +1,275 @@
-{% extends 'reports_base.html' %} {% block report_content %}
-<div class="max-w-6xl mx-auto p-4">
-  <h2 class="text-2xl font-bold mb-4 text-blue-800">Financial Report</h2>
-  <div class="mb-4 text-red-600">
-    Restricted: Only authorized users can view this report.
+{% extends 'reports_base.html' %}
+{% block report_content %}
+<div class="max-w-7xl mx-auto p-4">
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+    <div>
+      <h2 class="text-2xl font-bold mb-1 text-blue-800">Financial Report</h2>
+      <p class="text-sm text-gray-600">Revenue, payment mode, and time-based breakdowns for your sales.</p>
+    </div>
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-4 gap-3 w-full md:w-auto">
+      <div>
+        <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+        <input type="date" id="start_date" name="start_date" value="{{ start_date|default:'' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+        <input type="date" id="end_date" name="end_date" value="{{ end_date|default:'' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label for="cashier" class="block text-sm font-medium text-gray-700 mb-1">Cashier</label>
+        <select id="cashier" name="cashier" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500">
+          <option value="">All Cashiers</option>
+          {% for cashier in cashiers %}
+          <option value="{{ cashier.id }}" {% if selected_cashier == cashier.id|stringformat:"s" %}selected{% endif %}>{{ cashier.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="payment_method" class="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
+        <select id="payment_method" name="payment_method" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500">
+          <option value="">All Modes</option>
+          {% for code, label in payment_methods %}
+          <option value="{{ code }}" {% if selected_payment_method == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Filter</button>
+      </div>
+    </form>
   </div>
-  <!-- Filters: Date range, cashier, etc. -->
-  <div id="financial-filters" class="mb-6"></div>
-  <!-- Chart placeholder -->
-  <div id="financial-chart" class="mb-6"></div>
-  <!-- Table placeholder -->
-  <div id="financial-table"></div>
-  <div class="mb-6">
-    <canvas id="financial-summary-chart" height="80"></canvas>
-    <button
-      onclick="exportFinancialCSV()"
-      class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-    >
-      Export to CSV
+
+  <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6">
+    <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-sm uppercase tracking-wide text-gray-500">Total Revenue</p>
+      <p class="mt-3 text-2xl font-semibold text-gray-900">Ksh {{ total_revenue|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-sm uppercase tracking-wide text-gray-500">Total Tax</p>
+      <p class="mt-3 text-2xl font-semibold text-gray-900">Ksh {{ total_tax|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-sm uppercase tracking-wide text-gray-500">Total Discount</p>
+      <p class="mt-3 text-2xl font-semibold text-gray-900">Ksh {{ total_discount|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-sm uppercase tracking-wide text-gray-500">Sales Count</p>
+      <p class="mt-3 text-2xl font-semibold text-gray-900">{{ num_sales }}</p>
+    </div>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-2 mb-6">
+    <div class="bg-white rounded-xl shadow p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Payment Mode Breakdown</h3>
+        <span class="text-sm text-gray-500">All transactions</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm text-left border border-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3">Payment Mode</th>
+              <th class="px-4 py-3">Total</th>
+              <th class="px-4 py-3">Transactions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in payment_summary %}
+            <tr class="border-t border-gray-200 hover:bg-gray-50">
+              <td class="px-4 py-3">{% for code,label in payment_methods %}{% if code == item.payment_method %}{{ label }}{% endif %}{% endfor %}</td>
+              <td class="px-4 py-3">Ksh {{ item.total|floatformat:2 }}</td>
+              <td class="px-4 py-3">{{ item.count }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="px-4 py-6 text-center text-gray-500">No payment data available.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-4">
+        <canvas id="payment-summary-chart" height="160"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Revenue by Cashier</h3>
+        <span class="text-sm text-gray-500">Sorted by total</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm text-left border border-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3">Cashier</th>
+              <th class="px-4 py-3">Total Sales</th>
+              <th class="px-4 py-3">Sales Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in cashier_summary %}
+            <tr class="border-t border-gray-200 hover:bg-gray-50">
+              <td class="px-4 py-3">{{ item.served_by__username }}</td>
+              <td class="px-4 py-3">Ksh {{ item.total_sales|floatformat:2 }}</td>
+              <td class="px-4 py-3">{{ item.num_sales }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="px-4 py-6 text-center text-gray-500">No cashier transactions found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-4">
+        <canvas id="cashier-summary-chart" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <div class="bg-white rounded-xl shadow p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Daily Revenue</h3>
+        <span class="text-sm text-gray-500">Per day totals</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm text-left border border-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3">Date</th>
+              <th class="px-4 py-3">Total Sales</th>
+              <th class="px-4 py-3">Sales Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in daily_summary %}
+            <tr class="border-t border-gray-200 hover:bg-gray-50">
+              <td class="px-4 py-3">{{ item.day|date:'Y-m-d' }}</td>
+              <td class="px-4 py-3">Ksh {{ item.total_sales|floatformat:2 }}</td>
+              <td class="px-4 py-3">{{ item.num_sales }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="px-4 py-6 text-center text-gray-500">No daily sales data available.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Monthly Revenue</h3>
+        <span class="text-sm text-gray-500">Per month totals</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm text-left border border-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3">Month</th>
+              <th class="px-4 py-3">Total Sales</th>
+              <th class="px-4 py-3">Sales Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in monthly_summary %}
+            <tr class="border-t border-gray-200 hover:bg-gray-50">
+              <td class="px-4 py-3">{{ item.month|date:'F Y' }}</td>
+              <td class="px-4 py-3">Ksh {{ item.total_sales|floatformat:2 }}</td>
+              <td class="px-4 py-3">{{ item.num_sales }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="px-4 py-6 text-center text-gray-500">No monthly sales data available.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-6 text-right">
+    <button onclick="exportFinancialCSV()" class="inline-flex items-center bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+      Export Report CSV
     </button>
   </div>
 </div>
-{% endblock %} {% block extra_js %}
+{% endblock %}
+
+{% block extra_js %}
 <script src="/static/js/chart.min.js"></script>
 <script>
-  // Prepare data for chart
-  const cashierData = [
-      {% for item in cashier_summary %}
-          { name: "{{ item.served_by__username }}", total: {{ item.total_sales|floatformat:2 }} },
-      {% endfor %}
-  ];
-  const cashierLabels = cashierData.map(i => i.name);
-  const cashierTotals = cashierData.map(i => i.total);
-  const ctx = document.getElementById('financial-summary-chart').getContext('2d');
-  new Chart(ctx, {
-      type: 'bar',
-      data: {
-          labels: cashierLabels,
-          datasets: [{
-              label: 'Total Sales',
-              data: cashierTotals,
-              backgroundColor: 'rgba(239, 68, 68, 0.7)'
-          }]
-      },
-      options: {
-          responsive: true,
-          plugins: { legend: { display: false } }
-      }
-  });
-  // Export to CSV
-  function exportFinancialCSV() {
-      let csv = 'Cashier,Total Sales,Number of Sales,Total Tax,Total Discount\n';
-      {% for item in cashier_summary %}
-      csv += '{{ item.served_by__username }}'
-          + ',{{ item.total_sales|floatformat:2 }}'
-          + ',{{ item.num_sales }}'
-          + ',{{ total_tax|floatformat:2 }}'
-          + ',{{ total_discount|floatformat:2 }}\\n';
-      {% endfor %}
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'financial_report.csv';
-      a.click();
-      URL.revokeObjectURL(url);
+const paymentData = [
+  {% for item in payment_summary %}
+  {
+    label: "{% for code,label in payment_methods %}{% if code == item.payment_method %}{{ label }}{% endif %}{% endfor %}",
+    total: {{ item.total|floatformat:2 }}
+  },
+  {% endfor %}
+];
+const paymentLabels = paymentData.map(i => i.label);
+const paymentTotals = paymentData.map(i => i.total);
+const paymentCtx = document.getElementById('payment-summary-chart').getContext('2d');
+new Chart(paymentCtx, {
+  type: 'doughnut',
+  data: {
+    labels: paymentLabels,
+    datasets: [{
+      data: paymentTotals,
+      backgroundColor: ['#2563eb','#10b981','#f59e0b','#8b5cf6','#ef4444'],
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } }
   }
+});
+
+const cashierData = [
+  {% for item in cashier_summary %}
+  { label: "{{ item.served_by__username }}", total: {{ item.total_sales|floatformat:2 }} },
+  {% endfor %}
+];
+const cashierLabels = cashierData.map(i => i.label);
+const cashierTotals = cashierData.map(i => i.total);
+const cashierCtx = document.getElementById('cashier-summary-chart').getContext('2d');
+new Chart(cashierCtx, {
+  type: 'bar',
+  data: {
+    labels: cashierLabels,
+    datasets: [{
+      label: 'Total Sales',
+      data: cashierTotals,
+      backgroundColor: 'rgba(59, 130, 246, 0.75)'
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } }
+  }
+});
+
+function exportFinancialCSV() {
+  let csv = 'Metric,Value\n';
+  csv += 'Total Revenue,Ksh {{ total_revenue|floatformat:2 }}\n';
+  csv += 'Total Tax,Ksh {{ total_tax|floatformat:2 }}\n';
+  csv += 'Total Discount,Ksh {{ total_discount|floatformat:2 }}\n';
+  csv += 'Sales Count,{{ num_sales }}\n\n';
+  csv += 'Payment Mode,Total,Transactions\n';
+  {% for item in payment_summary %}
+  csv += '"{% for code,label in payment_methods %}{% if code == item.payment_method %}{{ label }}{% endif %}{% endfor %}",{{ item.total|floatformat:2 }},{{ item.count }}\n';
+  {% endfor %}
+  csv += '\nDaily Revenue,Total Sales,Sales Count\n';
+  {% for item in daily_summary %}
+  csv += '{{ item.day|date:"Y-m-d" }},{{ item.total_sales|floatformat:2 }},{{ item.num_sales }}\n';
+  {% endfor %}
+  csv += '\nMonthly Revenue,Total Sales,Sales Count\n';
+  {% for item in monthly_summary %}
+  csv += '{{ item.month|date:"F Y" }},{{ item.total_sales|floatformat:2 }},{{ item.num_sales }}\n';
+  {% endfor %}
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'financial_report.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 </script>
 {% endblock %}

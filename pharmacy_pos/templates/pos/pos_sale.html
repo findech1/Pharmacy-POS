@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Point of Sale - Pharmacy POS{% endblock %}
+{% block title %}Point of Sale - Eagle Health Pos System{% endblock %}
 {% block page_title %}Point of Sale{% endblock %}
 {% block page_description %}Process customer transactions and manage sales{% endblock %}
 
@@ -104,34 +104,129 @@
         <!-- Customer Selection -->
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2"
-            >Customer (Optional)</label
+            >Customer Type</label
+          >
+          <select
+            id="customer-type"
+            onchange="toggleNewCustomerFields()"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="existing">Existing Patient / Walk-in</option>
+            <option value="new">Add New Customer</option>
+          </select>
+        </div>
+        <div class="mb-4" id="existing-customer-block">
+          <label class="block text-sm font-medium text-gray-700 mb-2"
+            >Select Existing Customer</label
           >
           <select
             id="customer-select"
+            name="customer_id"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           >
+            <option value="" disabled selected>Select a patient or use walk-in</option>
             <option value="">Walk-in Customer</option>
             {% for customer in customers %}
             <option value="{{ customer.id }}">
               {{ customer.name }} - {{ customer.phone }}
             </option>
+            {% empty %}
+            <option value="" disabled>No saved patients available</option>
             {% endfor %}
           </select>
+        </div>
+        <div class="mb-4 hidden" id="new-customer-block">
+          <label class="block text-sm font-medium text-gray-700 mb-2"
+            >New Customer Details</label
+          >
+          <div class="grid gap-3">
+            <input
+              type="text"
+              id="new-customer-name"
+              placeholder="Customer name"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="text"
+              id="new-customer-phone"
+              placeholder="Phone number"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="email"
+              id="new-customer-email"
+              placeholder="Email address"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="text"
+              id="new-customer-address"
+              placeholder="Address"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Symptoms / Notes</label>
+          <textarea
+            id="sale-notes"
+            rows="3"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="Add symptoms, notes or case details"
+          ></textarea>
         </div>
 
         <!-- Payment Method -->
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2"
-            >Payment Method</label
+            >Add Payment</label
           >
-          <select
-            id="payment-method"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="mobile">Mobile Money</option>
-          </select>
+          <div class="grid gap-3">
+            <div>
+              <select
+                id="payment-method"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="mobile">MPESA</option>
+              </select>
+            </div>
+            <div>
+              <input
+                type="number"
+                id="payment-amount"
+                placeholder="Amount"
+                step="0.01"
+                min="0"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <input
+                type="text"
+                id="payment-reference"
+                placeholder="MPESA code or card reference"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              type="button"
+              onclick="addPayment()"
+              class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Add Payment
+            </button>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <h4 class="text-sm font-semibold text-gray-800 mb-2">Payment Breakdown</h4>
+          <div id="payment-lines" class="space-y-2"></div>
+          <div class="mt-3 text-sm text-gray-600">
+            <div>Total Paid: <span id="total-paid">Ksh 0.00</span></div>
+            <div>Amount Due: <span id="amount-due">Ksh 0.00</span></div>
+          </div>
         </div>
       </div>
 
@@ -249,7 +344,92 @@
 {% block extra_js %}
 <script>
   let cart = [];
+  let payments = [];
   let saleId = null;
+
+  // Add a payment entry
+  function addPayment() {
+    const method = document.getElementById('payment-method').value;
+    const amount = parseFloat(document.getElementById('payment-amount').value) || 0;
+    const reference = document.getElementById('payment-reference').value.trim();
+    const total = calculateTotal();
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+
+    if (amount <= 0) {
+      return alert('Enter a valid payment amount.');
+    }
+    if (totalPaid + amount > total) {
+      return alert('Payment total cannot exceed the amount due.');
+    }
+
+    payments.push({
+      payment_method: method,
+      amount: amount,
+      reference_number: reference,
+    });
+    document.getElementById('payment-amount').value = '';
+    document.getElementById('payment-reference').value = '';
+    renderPaymentLines();
+    updateTotals();
+  }
+
+  function removePayment(index) {
+    payments.splice(index, 1);
+    renderPaymentLines();
+    updateTotals();
+  }
+
+  function renderPaymentLines() {
+    const container = document.getElementById('payment-lines');
+    container.innerHTML = '';
+    if (payments.length === 0) {
+      container.innerHTML = '<div class="text-sm text-gray-500">No payments added yet.</div>';
+      return;
+    }
+    payments.forEach((payment, index) => {
+      const refLabel = payment.reference_number ? ` - ${payment.reference_number}` : '';
+      const line = document.createElement('div');
+      line.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200';
+      line.innerHTML = `
+        <div class="text-sm text-gray-800">
+          ${payment.payment_method.charAt(0).toUpperCase() + payment.payment_method.slice(1)}: Ksh ${payment.amount.toFixed(2)}${refLabel}
+        </div>
+        <button type="button" onclick="removePayment(${index})" class="text-red-600 hover:text-red-800 text-xs">Remove</button>
+      `;
+      container.appendChild(line);
+    });
+  }
+
+  function toggleNewCustomerFields() {
+    const type = document.getElementById('customer-type').value;
+    const existingBlock = document.getElementById('existing-customer-block');
+    const newBlock = document.getElementById('new-customer-block');
+    if (type === 'new') {
+      existingBlock.classList.add('hidden');
+      newBlock.classList.remove('hidden');
+    } else {
+      existingBlock.classList.remove('hidden');
+      newBlock.classList.add('hidden');
+    }
+  }
+
+  function updatePaymentStatus() {
+    const total = calculateTotal();
+    const paid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    document.getElementById('total-paid').textContent = `Ksh ${paid.toFixed(2)}`;
+    document.getElementById('amount-due').textContent = `Ksh ${(total - paid).toFixed(2)}`;
+    document.getElementById('process-sale-btn').disabled = cart.length === 0 || paid.toFixed(2) !== total.toFixed(2);
+  }
+
+  function calculateTotal() {
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const discountPercent = parseFloat(document.getElementById('discount').value) || 0;
+    const taxPercent = parseFloat(document.getElementById('tax').value) || 0;
+    const discountAmount = subtotal * (discountPercent / 100);
+    const afterDiscount = subtotal - discountAmount;
+    const taxAmount = afterDiscount * (taxPercent / 100);
+    return afterDiscount + taxAmount;
+  }
 
   // Add item to cart
   function addToCart(id, name, price, stock) {
@@ -367,6 +547,7 @@
 
     document.getElementById("subtotal").textContent = "Ksh " + subtotal.toFixed(2);
     document.getElementById("total").textContent = "Ksh " + total.toFixed(2);
+    updatePaymentStatus();
   }
 
   // Clear cart
@@ -376,7 +557,9 @@
       confirm("Are you sure you want to clear the cart?")
     ) {
       cart = [];
+      payments = [];
       updateCartDisplay();
+      renderPaymentLines();
       updateTotals();
     }
   }
@@ -391,14 +574,28 @@
       return;
     }
 
+    const customerType = document.getElementById("customer-type").value;
     const customerId = document.getElementById("customer-select").value;
-    const paymentMethod = document.getElementById("payment-method").value;
     const discount = parseFloat(document.getElementById("discount").value) || 0;
     const tax = parseFloat(document.getElementById("tax").value) || 0;
+    const notes = document.getElementById("sale-notes").value.trim();
+    const total = calculateTotal();
+    const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+
+    if (payments.length === 0) {
+      alert('Please add at least one payment.');
+      return;
+    }
+    if (totalPaid.toFixed(2) !== total.toFixed(2)) {
+      alert('Payment total must exactly match amount due.');
+      return;
+    }
 
     const saleData = {
-      customer_id: customerId || null,
-      payment_method: paymentMethod,
+      customer_id: customerType === 'existing' ? (customerId || null) : null,
+      new_customer: {},
+      notes: notes,
+      payments: payments,
       discount_percent: discount,
       tax_percent: tax,
       items: cart.map((item) => ({
@@ -407,6 +604,19 @@
         unit_price: item.price,
       })),
     };
+
+    if (customerType === 'new') {
+      saleData.new_customer = {
+        name: document.getElementById('new-customer-name').value.trim(),
+        phone: document.getElementById('new-customer-phone').value.trim(),
+        email: document.getElementById('new-customer-email').value.trim(),
+        address: document.getElementById('new-customer-address').value.trim(),
+      };
+      if (!saleData.new_customer.name) {
+        alert('Enter a name for the new customer.');
+        return;
+      }
+    }
 
     // Send to backend
     fetch('{% url "process_sale" %}', {
@@ -488,6 +698,11 @@
     document.getElementById("category-filter").value = "";
     filterProducts();
   }
+
+  // Ensure the toggle state is correct on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    toggleNewCustomerFields();
+  });
 
   // Get CSRF token
   function getCookie(name) {

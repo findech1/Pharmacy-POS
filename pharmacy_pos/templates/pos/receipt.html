@@ -2,11 +2,29 @@
 {% block title %}Receipt - Sale #{{ sale.id }}{% endblock %}
 {% block content %}
 <div class="max-w-md mx-auto bg-white shadow rounded p-6 mt-8 printable-receipt">
-    <h2 class="text-2xl font-bold mb-2 text-center">Pharmacy POS Receipt</h2>
+    <h2 class="text-2xl font-bold mb-2 text-center">Eagle Health Pos System Receipt</h2>
     <div class="mb-4 text-center text-gray-600">Sale #{{ sale.id }}<br>Date: {{ sale.sale_date }}</div>
     <div class="mb-2">
         <strong>Customer:</strong> {{ sale.customer|default:"Walk-in Customer" }}<br>
-        <strong>Payment Method:</strong> {{ sale.payment_method|title }}
+        <strong>Payment Method:</strong>
+        {% if sale.payment_method == 'split' %}
+            Split Payment
+        {% else %}
+            {{ sale.get_payment_method_display }}
+        {% endif %}
+        <br>
+        {% if sale.notes %}
+        <strong>Symptoms / Notes:</strong><br>
+        <span class="text-sm text-gray-700">{{ sale.notes }}</span><br>
+        {% endif %}
+        {% if sale.payments.count %}
+        <strong>Payment Details:</strong>
+        <ul class="list-disc list-inside text-sm text-gray-700">
+            {% for payment in sale.payments.all %}
+            <li>{{ payment.get_payment_method_display }} - Ksh {{ payment.amount|floatformat:2 }}{% if payment.reference_number %} ({{ payment.reference_number }}){% endif %}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
     </div>
     <hr class="my-2">
     <table class="w-full text-sm mb-4">

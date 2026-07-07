@@ -100,13 +100,44 @@ class Sale(models.Model):
     payment_method = models.CharField(max_length=20, choices=[
         ('cash', 'Cash'),
         ('card', 'Card'),
-        ('mobile', 'Mobile Money'),
+        ('mobile', 'MPESA'),
+        ('split', 'Split Payment'),
     ], default='cash')
+    notes = models.TextField(blank=True, default='')
     served_by = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Sale #{self.id} - {self.sale_date.strftime('%Y-%m-%d')}"
+
+    @property
+    def payment_summary(self):
+        payments = self.payments.all()
+        if payments.count() <= 1:
+            if payments.exists():
+                p = payments.first()
+                ref = f" ({p.reference_number})" if p.reference_number else ''
+                return f"{p.get_payment_method_display()}{ref}"
+            return self.get_payment_method_display()
+        return ", ".join(
+            f"{p.get_payment_method_display()} Ksh {p.amount:.2f}{(' (' + p.reference_number + ')' if p.reference_number else '')}"
+            for p in payments
+        )
+
+class Payment(models.Model):
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('card', 'Card'),
+        ('mobile', 'MPESA'),
+    ]
+    sale = models.ForeignKey('Sale', on_delete=models.CASCADE, related_name='payments')
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    reference_number = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.get_payment_method_display()} - Ksh {self.amount:.2f}"
 
 class SaleItem(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name='items')

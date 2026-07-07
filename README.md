@@ -1,1 +1,1 @@
-# Pharmacy-POS
+# Eagle Health Pos System

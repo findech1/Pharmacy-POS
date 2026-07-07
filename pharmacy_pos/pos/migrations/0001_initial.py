@@ -93,7 +93,7 @@ class Migration(migrations.Migration):
                 ('total_amount', models.DecimalField(decimal_places=2, default=0, max_digits=10)),
                 ('discount', models.DecimalField(decimal_places=2, default=0, max_digits=10)),
                 ('tax', models.DecimalField(decimal_places=2, default=0, max_digits=10)),
-                ('payment_method', models.CharField(choices=[('cash', 'Cash'), ('card', 'Card'), ('mobile', 'Mobile Money')], default='cash', max_length=20)),
+                ('payment_method', models.CharField(choices=[('cash', 'Cash'), ('card', 'Card'), ('mobile', 'MPESA')], default='cash', max_length=20)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('customer', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='pos.customer')),
                 ('served_by', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),

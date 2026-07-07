@@ -3,13 +3,15 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db.models import Sum, Count, Q, F
+from django.db.models.functions import TruncDate, TruncMonth
 from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .models import Medicine, Inventory, Customer, Sale, Supplier, Order, Category
+from .models import Medicine, Inventory, Customer, Sale, Supplier, Order, Category, Payment
 from .forms import *
 from django.views.decorators.csrf import csrf_exempt
 import json
@@ -154,10 +156,12 @@ def customer_add(request):
 @login_required
 def pos_sale(request):
     medicines = Medicine.objects.filter(is_active=True)
-    customers = Customer.objects.all()
+    customers = Customer.objects.all().order_by('name')
+    categories = Category.objects.filter(is_active=True)
     return render(request, 'pos/pos_sale.html', {
         'medicines': medicines,
-        'customers': customers
+        'customers': customers,
+        'categories': categories,
     })
 
 @csrf_exempt
@@ -168,13 +172,23 @@ def process_sale(request):
             if request.content_type == 'application/json':
                 data = json.loads(request.body)
                 customer_id = data.get('customer_id')
-                payment_method = data.get('payment_method', 'cash')
+                new_customer_data = data.get('new_customer', {})
+                notes = data.get('notes', '')
+                payments = data.get('payments', [])
                 discount = float(data.get('discount_percent', 0))
                 tax = float(data.get('tax_percent', 0))
                 items = data.get('items', [])
             else:
                 customer_id = request.POST.get('customer_id')
-                payment_method = request.POST.get('payment_method', 'cash')
+                customer_type = request.POST.get('customer_type')
+                new_customer_data = {
+                    'name': request.POST.get('new_customer_name', '').strip(),
+                    'phone': request.POST.get('new_customer_phone', '').strip(),
+                    'email': request.POST.get('new_customer_email', '').strip(),
+                    'address': request.POST.get('new_customer_address', '').strip(),
+                }
+                notes = request.POST.get('notes', '')
+                payments = []
                 discount = float(request.POST.get('discount', 0))
                 tax = float(request.POST.get('tax', 0))
                 items = []
@@ -187,16 +201,51 @@ def process_sale(request):
                                 'medicine_id': medicine_id,
                                 'quantity': quantity
                             })
-            # Create sale
+            # Create or reuse customer for checkout
+            customer = None
+            if customer_id:
+                customer = Customer.objects.filter(id=customer_id).first()
+            elif new_customer_data and new_customer_data.get('name'):
+                customer = Customer.objects.create(
+                    name=new_customer_data.get('name'),
+                    phone=new_customer_data.get('phone', ''),
+                    email=new_customer_data.get('email', ''),
+                    address=new_customer_data.get('address', ''),
+                )
+            # Calculate totals and validate payments
+            subtotal = 0
+            for item in items:
+                medicine_id = item.get('medicine_id')
+                quantity = int(item.get('quantity', 0))
+                if quantity > 0 and medicine_id:
+                    medicine = Medicine.objects.get(id=medicine_id)
+                    unit_price = float(item.get('unit_price', medicine.price if hasattr(medicine, 'price') else 0))
+                    subtotal += quantity * unit_price
+            discount_amount = subtotal * (discount / 100)
+            taxable_amount = subtotal - discount_amount
+            tax_amount = taxable_amount * (tax / 100)
+            total_amount = taxable_amount + tax_amount
+
+            if not payments:
+                return JsonResponse({'success': False, 'error': 'At least one payment method is required.'}, status=400)
+
+            payment_total = 0
+            for payment in payments:
+                payment_total += float(payment.get('amount', 0))
+            if round(payment_total, 2) != round(total_amount, 2):
+                return JsonResponse({'success': False, 'error': 'Payment total must exactly match amount due.'}, status=400)
+
+            sale_method = 'split' if len(payments) > 1 else payments[0].get('payment_method', 'cash')
             sale = Sale.objects.create(
-                customer_id=customer_id if customer_id else None,
-                payment_method=payment_method,
+                customer=customer,
+                payment_method=sale_method,
+                notes=notes,
                 discount=discount,
                 tax=tax,
-                served_by=request.user
+                served_by=request.user,
+                total_amount=round(total_amount, 2)
             )
-            total_amount = 0
-            # Process sale items
+
             for item in items:
                 medicine_id = item.get('medicine_id')
                 quantity = int(item.get('quantity', 0))
@@ -204,7 +253,7 @@ def process_sale(request):
                 if quantity > 0 and medicine_id:
                     medicine = Medicine.objects.get(id=medicine_id)
                     if unit_price is None:
-                        unit_price = float(medicine.selling_price)
+                        unit_price = float(medicine.price)
                     total_price = quantity * unit_price
                     SaleItem.objects.create(
                         sale=sale,
@@ -213,9 +262,14 @@ def process_sale(request):
                         unit_price=unit_price,
                         total_price=total_price
                     )
-                    total_amount += total_price
-            sale.total_amount = total_amount - discount + tax
-            sale.save()
+
+            for payment in payments:
+                Payment.objects.create(
+                    sale=sale,
+                    payment_method=payment.get('payment_method', 'cash'),
+                    amount=round(float(payment.get('amount', 0)), 2),
+                    reference_number=payment.get('reference_number', '').strip()
+                )
             return JsonResponse({'success': True, 'sale_id': sale.id})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
@@ -278,21 +332,29 @@ def supplier_add(request):
 # Sales Report Views
 @login_required
 def sales_report(request):
-    sales = Sale.objects.order_by('-sale_date')
+    sales = Sale.objects.order_by('-sale_date').prefetch_related('payments', 'items').select_related('customer', 'served_by')
     # Filter by date range if provided
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
-    payment_method = request.GET.get('payment_method')  # new
+    payment_method = request.GET.get('payment_method')
     if start_date:
         sales = sales.filter(sale_date__date__gte=start_date)
     if end_date:
         sales = sales.filter(sale_date__date__lte=end_date)
     if payment_method:
-        sales = sales.filter(payment_method=payment_method)
+        sales = sales.filter(
+            Q(payment_method=payment_method) |
+            Q(payments__payment_method=payment_method)
+        ).distinct()
+    payment_summary = Payment.objects.filter(sale__in=sales).values('payment_method').annotate(total=Sum('amount'))
     paginator = Paginator(sales, 10)
     page = request.GET.get('page')
     sales = paginator.get_page(page)
-    return render(request, 'pos/sales_report.html', {'sales': sales, 'payment_method': payment_method})
+    return render(request, 'pos/sales_report.html', {
+        'sales': sales,
+        'payment_method': payment_method,
+        'payment_summary': payment_summary,
+    })
 
 @login_required
 def receipt(request, sale_id):
@@ -346,7 +408,7 @@ def customer_report(request):
     customer_id = request.GET.get('customer')
 
     customers = Customer.objects.all()
-    sales = Sale.objects.select_related('customer').all()
+    sales = Sale.objects.select_related('customer', 'served_by').prefetch_related('payments', 'items').all()
     if start_date:
         sales = sales.filter(sale_date__date__gte=start_date)
     if end_date:
@@ -355,15 +417,33 @@ def customer_report(request):
         sales = sales.filter(customer_id=customer_id)
 
     # Aggregation: total sales per customer
-    customer_summary = sales.values('customer__name').annotate(
+    customer_summary = sales.values(
+        'customer__id',
+        'customer__name',
+        'customer__email',
+        'customer__phone'
+    ).annotate(
         total_sales=Sum('total_amount'),
         num_purchases=Count('id')
     ).order_by('-total_sales')
 
+    selected_customer = None
+    customer_history = []
+    selected_customer_sales_total = 0
+    if customer_id:
+        selected_customer = Customer.objects.filter(id=customer_id).first()
+        customer_history = sales.order_by('-sale_date')
+        selected_customer_sales_total = customer_history.aggregate(total=Sum('total_amount'))['total'] or 0
+
     context = {
         'customer_summary': list(customer_summary),
         'customers': customers,
-        'sales': sales,
+        'selected_customer': selected_customer,
+        'customer_history': customer_history,
+        'selected_customer_sales_total': selected_customer_sales_total,
+        'start_date': start_date,
+        'end_date': end_date,
+        'selected_customer_id': customer_id,
     }
     return render(request, 'pos/customer_report.html', context)
 
@@ -402,14 +482,20 @@ def financial_report(request):
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     cashier_id = request.GET.get('cashier')
+    payment_method = request.GET.get('payment_method')
 
-    sales = Sale.objects.select_related('served_by').all()
+    sales = Sale.objects.select_related('served_by').prefetch_related('payments').all()
     if start_date:
         sales = sales.filter(sale_date__date__gte=start_date)
     if end_date:
         sales = sales.filter(sale_date__date__lte=end_date)
     if cashier_id:
         sales = sales.filter(served_by_id=cashier_id)
+    if payment_method:
+        sales = sales.filter(
+            Q(payment_method=payment_method) |
+            Q(payments__payment_method=payment_method)
+        ).distinct()
 
     # Aggregation: total revenue, total tax, total discount
     total_revenue = sales.aggregate(total=Sum('total_amount'))['total'] or 0
@@ -423,12 +509,39 @@ def financial_report(request):
         num_sales=Count('id')
     ).order_by('-total_sales')
 
+    # Revenue by payment mode
+    payment_summary = Payment.objects.filter(sale__in=sales).values('payment_method').annotate(
+        total=Sum('amount'),
+        count=Count('id')
+    ).order_by('-total')
+
+    # Daily and monthly revenue breakdown
+    daily_summary = sales.annotate(day=TruncDate('sale_date')).values('day').annotate(
+        total_sales=Sum('total_amount'),
+        num_sales=Count('id')
+    ).order_by('day')
+
+    monthly_summary = sales.annotate(month=TruncMonth('sale_date')).values('month').annotate(
+        total_sales=Sum('total_amount'),
+        num_sales=Count('id')
+    ).order_by('month')
+
+    cashiers = User.objects.filter(id__in=sales.values_list('served_by_id', flat=True).distinct())
+
     context = {
         'total_revenue': total_revenue,
         'total_tax': total_tax,
         'total_discount': total_discount,
         'num_sales': num_sales,
         'cashier_summary': list(cashier_summary),
-        'sales': sales,
+        'payment_summary': list(payment_summary),
+        'daily_summary': list(daily_summary),
+        'monthly_summary': list(monthly_summary),
+        'payment_methods': Payment.PAYMENT_METHOD_CHOICES,
+        'cashiers': cashiers,
+        'start_date': start_date,
+        'end_date': end_date,
+        'selected_cashier': cashier_id,
+        'selected_payment_method': payment_method,
     }
     return render(request, 'pos/financial_report.html', context)
