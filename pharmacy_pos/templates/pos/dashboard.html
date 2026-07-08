@@ -88,31 +88,164 @@
   </div>
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
     <!-- Expired Medicines -->
-    <div class="bg-red-100 rounded-lg p-4">
-        <h3 class="text-lg font-semibold text-red-700 mb-2">Expired Medicines</h3>
-        {% if expired %}
-            <ul>
-            {% for inv in expired %}
-                <li>{{ inv.medicine.name }} ({{ inv.quantity }}) - Expired: {{ inv.expiry_date }}</li>
-            {% endfor %}
-            </ul>
-        {% else %}
-            <p class="text-gray-500">No expired medicines.</p>
-        {% endif %}
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-red-600 to-red-700 p-6 text-white">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-circle text-3xl mr-3"></i>
+                    <div>
+                        <h3 class="text-lg font-semibold">Expired Medicines</h3>
+                        <p class="text-red-100 text-sm">{% if expired %}{{ expired|length }} item(s){% else %}None{% endif %}</p>
+                    </div>
+                </div>
+                <div class="bg-red-500 bg-opacity-50 rounded-full p-3">
+                    <i class="fas fa-times text-2xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="p-6">
+            {% if expired %}
+                <div class="mb-4">
+                    <input type="text" id="expired-filter" placeholder="Search medicine..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent" />
+                </div>
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                {% for inv in expired %}
+                    <div class="expired-item p-3 bg-red-50 rounded-lg border-l-4 border-red-500 hover:bg-red-100 transition-colors duration-200 cursor-pointer" data-medicine="{{ inv.medicine.name|lower }}">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <p class="font-semibold text-gray-900">{{ inv.medicine.name }}</p>
+                                <div class="flex gap-4 mt-1 text-sm text-gray-600">
+                                    <span><i class="fas fa-cubes mr-1"></i>Qty: {{ inv.quantity }}</span>
+                                    <span><i class="fas fa-calendar mr-1"></i>Expired: <span class="text-red-600 font-semibold">{{ inv.expiry_date|date:"M d, Y" }}</span></span>
+                                </div>
+                            </div>
+                            <span class="bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full">EXPIRED</span>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-8">
+                    <i class="fas fa-check-circle text-4xl text-green-500 mb-2"></i>
+                    <p class="text-gray-500 font-medium">No expired medicines</p>
+                    <p class="text-gray-400 text-sm">Your inventory is clear!</p>
+                </div>
+            {% endif %}
+        </div>
     </div>
     <!-- Close to Expiry Medicines -->
-    <div class="bg-yellow-100 rounded-lg p-4">
-        <h3 class="text-lg font-semibold text-yellow-700 mb-2">Close to Expiry (Next 30 Days)</h3>
-        {% if close_to_expiry %}
-            <ul>
-            {% for inv in close_to_expiry %}
-                <li>{{ inv.medicine.name }} ({{ inv.quantity }}) - Expires: {{ inv.expiry_date }}</li>
-            {% endfor %}
-            </ul>
-        {% else %}
-            <p class="text-gray-500">No medicines close to expiry.</p>
-        {% endif %}
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-yellow-500 to-yellow-600 p-6 text-white">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-clock text-3xl mr-3"></i>
+                    <div>
+                        <h3 class="text-lg font-semibold">Close to Expiry</h3>
+                        <p class="text-yellow-100 text-sm">{% if close_to_expiry %}{{ close_to_expiry|length }} item(s) within 30 days{% else %}None{% endif %}</p>
+                    </div>
+                </div>
+                <div class="bg-yellow-400 bg-opacity-50 rounded-full p-3">
+                    <i class="fas fa-hourglass-end text-2xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="p-6">
+            {% if close_to_expiry %}
+                <div class="mb-4">
+                    <div class="flex gap-2">
+                        <input type="text" id="closeexpiry-filter" placeholder="Search medicine..." class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent" />
+                        <select id="closeexpiry-sort" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500">
+                            <option value="date">Sort by Date</option>
+                            <option value="qty">Sort by Quantity</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                {% for inv in close_to_expiry %}
+                    <div class="closeexpiry-item p-3 bg-yellow-50 rounded-lg border-l-4 border-yellow-500 hover:bg-yellow-100 transition-colors duration-200 cursor-pointer" data-medicine="{{ inv.medicine.name|lower }}" data-expiry="{{ inv.expiry_date|date:'Ym d' }}" data-qty="{{ inv.quantity }}">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <p class="font-semibold text-gray-900">{{ inv.medicine.name }}</p>
+                                <div class="flex gap-4 mt-1 text-sm text-gray-600">
+                                    <span><i class="fas fa-cubes mr-1"></i>Qty: {{ inv.quantity }}</span>
+                                    <span><i class="fas fa-calendar mr-1"></i>Expires: <span class="text-yellow-600 font-semibold">{{ inv.expiry_date|date:"M d, Y" }}</span></span>
+                                </div>
+                            </div>
+                            <span class="bg-yellow-600 text-white text-xs font-bold px-3 py-1 rounded-full">WARNING</span>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-8">
+                    <i class="fas fa-check-circle text-4xl text-green-500 mb-2"></i>
+                    <p class="text-gray-500 font-medium">No medicines close to expiry</p>
+                    <p class="text-gray-400 text-sm">Your inventory is well-stocked!</p>
+                </div>
+            {% endif %}
+        </div>
     </div>
 </div>
+
+<!-- JavaScript for filters -->
+<script>
+    // Expired medicines filter
+    const expiredFilter = document.getElementById('expired-filter');
+    if (expiredFilter) {
+        expiredFilter.addEventListener('keyup', function() {
+            const filterValue = this.value.toLowerCase();
+            const items = document.querySelectorAll('.expired-item');
+            items.forEach(item => {
+                const medicineName = item.dataset.medicine;
+                if (medicineName.includes(filterValue)) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    // Close to expiry filter
+    const closeExpiryFilter = document.getElementById('closeexpiry-filter');
+    const closeExpirySort = document.getElementById('closeexpiry-sort');
+    const sortItems = function() {
+        const items = Array.from(document.querySelectorAll('.closeexpiry-item'));
+        const filterValue = (closeExpiryFilter?.value || '').toLowerCase();
+        const sortValue = closeExpirySort?.value || 'date';
+
+        items.forEach(item => {
+            const medicineName = item.dataset.medicine;
+            if (medicineName.includes(filterValue)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        // Sort the visible items
+        const visibleItems = items.filter(item => item.style.display !== 'none');
+        const parent = document.querySelector('.space-y-2.max-h-96');
+        
+        if (sortValue === 'date') {
+            visibleItems.sort((a, b) => {
+                const dateA = new Date(a.dataset.expiry.replace(/(\d{4})(\d{2})(\d+)/, '$1-$2-$3'));
+                const dateB = new Date(b.dataset.expiry.replace(/(\d{4})(\d{2})(\d+)/, '$1-$2-$3'));
+                return dateA - dateB;
+            });
+        } else if (sortValue === 'qty') {
+            visibleItems.sort((a, b) => b.dataset.qty - a.dataset.qty);
+        }
+
+        visibleItems.forEach(item => parent?.appendChild(item));
+    };
+
+    if (closeExpiryFilter) {
+        closeExpiryFilter.addEventListener('keyup', sortItems);
+    }
+    if (closeExpirySort) {
+        closeExpirySort.addEventListener('change', sortItems);
+    }
+</script>
 </div>
 {% endblock %}

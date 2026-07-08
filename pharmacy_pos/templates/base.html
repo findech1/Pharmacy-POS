@@ -1,186 +1,238 @@
 {% load crispy_forms_tags %}
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}Eagle Health Pos System{% endblock %}</title>
-    
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+
     <!-- Custom CSS -->
     <style>
-        .sidebar-active {
-            background-color: rgba(59, 130, 246, 0.1);
-            border-right: 3px solid #3b82f6;
-        }
-        .sidebar-active i, .sidebar-active span {
-            color: #3b82f6;
-        }
-        .glass-effect {
-            backdrop-filter: blur(10px);
-            background-color: rgba(255, 255, 255, 0.8);
-        }
+      .sidebar-active {
+        background-color: rgba(59, 130, 246, 0.1);
+        border-right: 3px solid #3b82f6;
+      }
+      .sidebar-active i,
+      .sidebar-active span {
+        color: #3b82f6;
+      }
+      .glass-effect {
+        backdrop-filter: blur(10px);
+        background-color: rgba(255, 255, 255, 0.8);
+      }
     </style>
-    
+
     {% block extra_css %}{% endblock %}
-</head>
-<body class="bg-gray-100 font-sans">
+  </head>
+  <body class="bg-gray-100 font-sans">
     <div class="flex h-screen">
-        <!-- Sidebar -->
-        <div class="bg-blue-600 text-white w-64 flex-shrink-0 flex flex-col">
-            <!-- Logo/Brand -->
-            <div class="p-6 border-b border-blue-500">
-                <h1 class="text-xl font-bold flex items-center">
-                    <i class="fas fa-pills mr-3"></i>
-                    Eagle Health Pos System
-                </h1>
-                <p class="text-blue-200 text-sm mt-1">Welcome, {{ user.first_name|default:user.username }}</p>
-            </div>
-            
-            <!-- Navigation Menu -->
-            <nav class="flex-1 px-4 py-6 space-y-2">
-                <a href="{% url 'dashboard' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if request.resolver_match.url_name == 'dashboard' %}sidebar-active{% endif %}">
-                    <i class="fas fa-tachometer-alt w-5 mr-3"></i>
-                    <span>Dashboard</span>
-                </a>
-                
-                <a href="{% url 'pos_sale' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if request.resolver_match.url_name == 'pos_sale' %}sidebar-active{% endif %}">
-                    <i class="fas fa-cash-register w-5 mr-3"></i>
-                    <span>Point of Sale</span>
-                </a>
-                
-                <a href="{% url 'medicine_list' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'medicine' in request.resolver_match.url_name %}sidebar-active{% endif %}">
-                    <i class="fas fa-pills w-5 mr-3"></i>
-                    <span>Medicines</span>
-                </a>
-                
-                <a href="{% url 'customer_list' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'customer' in request.resolver_match.url_name %}sidebar-active{% endif %}">
-                    <i class="fas fa-users w-5 mr-3"></i>
-                    <span>Customers</span>
-                </a>
-                
-                <a href="{% url 'inventory_list' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'inventory' in request.resolver_match.url_name %}sidebar-active{% endif %}">
-                    <i class="fas fa-boxes w-5 mr-3"></i>
-                    <span>Inventory</span>
-                </a>
-                
-                <a href="{% url 'category_list' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'categor' in request.resolver_match.url_name %}sidebar-active{% endif %}">
-                    <i class="fas fa-tags w-5 mr-3"></i>
-                    <span>Categories</span>
-                </a>
-                
-                <a href="{% url 'supplier_list' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'supplier' in request.resolver_match.url_name %}sidebar-active{% endif %}">
-                    <i class="fas fa-truck w-5 mr-3"></i>
-                    <span>Suppliers</span>
-                </a>
-                
-                <a href="{% url 'sales_report' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'report' in request.resolver_match.url_name %}sidebar-active{% endif %}">
-                    <i class="fas fa-chart-bar w-5 mr-3"></i>
-                    <span>Sales Report</span>
-                </a>
-                
-                <a href="{% url 'add_user' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if request.resolver_match.url_name == 'add_user' %}sidebar-active{% endif %}">
-                    <i class="fas fa-user-plus w-5 mr-3"></i>
-                    <span>Add User</span>
-                </a>
-            </nav>
-            
-            <!-- Logout -->
-            <div class="p-4 border-t border-blue-500">
-                <a href="{% url 'login' %}" class="flex items-center px-4 py-3 rounded-lg hover:bg-red-600 transition-colors duration-200 text-red-200 hover:text-white">
-                    <i class="fas fa-sign-out-alt w-5 mr-3"></i>
-                    <span>Logout</span>
-                </a>
-            </div>
+      <!-- Sidebar -->
+      <div class="bg-blue-600 text-white w-64 flex-shrink-0 flex flex-col">
+        <!-- Logo/Brand -->
+        <div class="p-6 border-b border-blue-500">
+          <h1 class="text-xl font-bold flex items-center">
+            <i class="fas fa-pills mr-3"></i>
+            Eagle Health Pos System
+          </h1>
+          <p class="text-blue-200 text-sm mt-1">
+            Welcome, {{ user.first_name|default:user.username }}
+          </p>
         </div>
-        
-        <!-- Main Content -->
-        <div class="flex-1 flex flex-col overflow-hidden">
-            <!-- Top Header -->
-            <header class="bg-white shadow-md border-b border-gray-200 px-6 py-4">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <h2 class="text-2xl font-bold text-gray-800">{% block page_title %}{% endblock %}</h2>
-                        <p class="text-gray-600 text-sm">{% block page_description %}{% endblock %}</p>
-                    </div>
-                    <div class="flex items-center space-x-4">
-                        <!-- Date/Time -->
-                        <div class="text-right">
-                            <p class="text-sm font-medium text-gray-700" id="current-date"></p>
-                            <p class="text-xs text-gray-500" id="current-time"></p>
-                        </div>
-                        
-                        <!-- User Profile -->
-                        <div class="flex items-center space-x-3">
-                            <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                                <span class="text-white font-medium text-sm">
-                                    {{ user.first_name.0|default:user.username.0|upper }}
-                                </span>
-                            </div>
-                            <span class="text-gray-700 font-medium">{{ user.first_name|default:user.username }}</span>
-                        </div>
-                    </div>
+
+        <!-- Navigation Menu -->
+        <nav class="flex-1 px-4 py-6 space-y-2">
+          <a
+            href="{% url 'dashboard' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if request.resolver_match.url_name == 'dashboard' %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-tachometer-alt w-5 mr-3"></i>
+            <span>Dashboard</span>
+          </a>
+
+          <a
+            href="{% url 'pos_sale' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if request.resolver_match.url_name == 'pos_sale' %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-cash-register w-5 mr-3"></i>
+            <span>Point of Sale</span>
+          </a>
+
+          <a
+            href="{% url 'medicine_list' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'medicine' in request.resolver_match.url_name %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-pills w-5 mr-3"></i>
+            <span>Medicines</span>
+          </a>
+
+          <a
+            href="{% url 'customer_list' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'customer' in request.resolver_match.url_name %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-users w-5 mr-3"></i>
+            <span>Customers</span>
+          </a>
+
+          <a
+            href="{% url 'inventory_list' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'inventory' in request.resolver_match.url_name %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-boxes w-5 mr-3"></i>
+            <span>Inventory</span>
+          </a>
+
+          <a
+            href="{% url 'category_list' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'categor' in request.resolver_match.url_name %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-tags w-5 mr-3"></i>
+            <span>Categories</span>
+          </a>
+
+          <a
+            href="{% url 'supplier_list' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'supplier' in request.resolver_match.url_name %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-truck w-5 mr-3"></i>
+            <span>Suppliers</span>
+          </a>
+
+          <a
+            href="{% url 'sales_report' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'report' in request.resolver_match.url_name %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-chart-bar w-5 mr-3"></i>
+            <span>Reports</span>
+          </a>
+
+          <a
+            href="{% url 'add_user' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if request.resolver_match.url_name == 'add_user' %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-user-plus w-5 mr-3"></i>
+            <span>Add User</span>
+          </a>
+        </nav>
+
+        <!-- Logout -->
+        <div class="p-4 border-t border-blue-500">
+          <a
+            href="{% url 'login' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-red-600 transition-colors duration-200 text-red-200 hover:text-white"
+          >
+            <i class="fas fa-sign-out-alt w-5 mr-3"></i>
+            <span>Logout</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Top Header -->
+        <header class="bg-white shadow-md border-b border-gray-200 px-6 py-4">
+          <div class="flex justify-between items-center">
+            <div>
+              <h2 class="text-2xl font-bold text-gray-800">
+                {% block page_title %}{% endblock %}
+              </h2>
+              <p class="text-gray-600 text-sm">
+                {% block page_description %}{% endblock %}
+              </p>
+            </div>
+            <div class="flex items-center space-x-4">
+              <!-- Date/Time -->
+              <div class="text-right">
+                <p
+                  class="text-sm font-medium text-gray-700"
+                  id="current-date"
+                ></p>
+                <p class="text-xs text-gray-500" id="current-time"></p>
+              </div>
+
+              <!-- User Profile -->
+              <div class="flex items-center space-x-3">
+                <div
+                  class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center"
+                >
+                  <span class="text-white font-medium text-sm">
+                    {{ user.first_name.0|default:user.username.0|upper }}
+                  </span>
                 </div>
-            </header>
-            
-            <!-- Page Content -->
-            <main class="flex-1 overflow-auto p-6">
-                <!-- Messages -->
-                {% if messages %}
-                    <div class="mb-6">
-                        {% for message in messages %}
-                            <div class="alert alert-{{ message.tags }} bg-{% if message.tags == 'error' %}red{% elif message.tags == 'success' %}green{% elif message.tags == 'warning' %}yellow{% else %}blue{% endif %}-100 border border-{% if message.tags == 'error' %}red{% elif message.tags == 'success' %}green{% elif message.tags == 'warning' %}yellow{% else %}blue{% endif %}-400 text-{% if message.tags == 'error' %}red{% elif message.tags == 'success' %}green{% elif message.tags == 'warning' %}yellow{% else %}blue{% endif %}-700 px-4 py-3 rounded-lg mb-3" role="alert">
-                                <div class="flex items-center">
-                                    <i class="fas fa-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'success' %}check-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} mr-2"></i>
-                                    <span>{{ message }}</span>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-                
-                {% block content %}{% endblock %}
-            </main>
-        </div>
+                <span class="text-gray-700 font-medium"
+                  >{{ user.first_name|default:user.username }}</span
+                >
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <!-- Page Content -->
+        <main class="flex-1 overflow-auto p-6">
+          <!-- Messages -->
+          {% if messages %}
+          <div class="mb-6">
+            {% for message in messages %}
+            <div
+              class="alert alert-{{ message.tags }} bg-{% if message.tags == 'error' %}red{% elif message.tags == 'success' %}green{% elif message.tags == 'warning' %}yellow{% else %}blue{% endif %}-100 border border-{% if message.tags == 'error' %}red{% elif message.tags == 'success' %}green{% elif message.tags == 'warning' %}yellow{% else %}blue{% endif %}-400 text-{% if message.tags == 'error' %}red{% elif message.tags == 'success' %}green{% elif message.tags == 'warning' %}yellow{% else %}blue{% endif %}-700 px-4 py-3 rounded-lg mb-3"
+              role="alert"
+            >
+              <div class="flex items-center">
+                <i
+                  class="fas fa-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'success' %}check-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} mr-2"
+                ></i>
+                <span>{{ message }}</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %} {% block content %}{% endblock %}
+        </main>
+      </div>
     </div>
-    
+
     <!-- JavaScript -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    
+
     <script>
-        // Update date and time
-        function updateDateTime() {
-            const now = new Date();
-            const dateOptions = { 
-                weekday: 'short', 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric' 
-            };
-            const timeOptions = { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: true 
-            };
-            
-            document.getElementById('current-date').textContent = now.toLocaleDateString('en-US', dateOptions);
-            document.getElementById('current-time').textContent = now.toLocaleTimeString('en-US', timeOptions);
-        }
-        
-        updateDateTime();
-        setInterval(updateDateTime, 1000);
-        
-        // Auto-hide alerts after 5 seconds
-        setTimeout(function() {
-            $('.alert').fadeOut('slow');
-        }, 5000);
+      // Update date and time
+      function updateDateTime() {
+        const now = new Date();
+        const dateOptions = {
+          weekday: "short",
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        };
+        const timeOptions = {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        };
+
+        document.getElementById("current-date").textContent =
+          now.toLocaleDateString("en-US", dateOptions);
+        document.getElementById("current-time").textContent =
+          now.toLocaleTimeString("en-US", timeOptions);
+      }
+
+      updateDateTime();
+      setInterval(updateDateTime, 1000);
+
+      // Auto-hide alerts after 5 seconds
+      setTimeout(function () {
+        $(".alert").fadeOut("slow");
+      }, 5000);
     </script>
-    
+
     {% block extra_js %}{% endblock %}
-</body>
+  </body>
 </html>

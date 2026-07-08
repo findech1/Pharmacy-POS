@@ -122,28 +122,35 @@ const customerData = [
 ];
 const custLabels = customerData.map(i => i.name);
 const custData = customerData.map(i => i.total);
-const ctx = document.getElementById('customer-summary-chart').getContext('2d');
-new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: custLabels,
-        datasets: [{
-            label: 'Total Sales',
-            data: custData,
-            backgroundColor: 'rgba(59, 130, 246, 0.7)'
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } }
-    }
-});
+const ctx = document.getElementById('customer-summary-chart');
+if (ctx && typeof Chart !== 'undefined' && custLabels.length) {
+    new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: custLabels,
+            datasets: [{
+                label: 'Total Sales',
+                data: custData,
+                backgroundColor: 'rgba(59, 130, 246, 0.7)'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } }
+        }
+    });
+} else if (ctx) {
+    ctx.parentElement.innerHTML += '<div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700">Patient chart is unavailable right now.</div>';
+}
 function exportCustomerCSV() {
     let csv = 'Customer,Email,Phone,Total Sales,Number of Purchases\n';
     {% for item in customer_summary %}
-    csv += '"{{ item.customer__name }}"'
-        + ',"{{ item.customer__email|default:"" }}"'
-        + ',"{{ item.customer__phone|default:"" }}"'
+    var customerName = '{{ item.customer__name|escapejs }}';
+    var customerEmail = '{{ item.customer__email|default:""|escapejs }}';
+    var customerPhone = '{{ item.customer__phone|default:""|escapejs }}';
+    csv += '"' + customerName.replace(/"/g, '""') + '"'
+        + ',"' + customerEmail.replace(/"/g, '""') + '"'
+        + ',"' + customerPhone.replace(/"/g, '""') + '"'
         + ',{{ item.total_sales|floatformat:2 }}'
         + ',{{ item.num_purchases }}\n';
     {% endfor %}

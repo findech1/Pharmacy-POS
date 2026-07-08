@@ -41,6 +41,15 @@
             </button>
           </div>
         </div>
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+          <div>
+            <p class="font-semibold">Quick checkout tips</p>
+            <p class="text-blue-700">Tap a product to add it, adjust quantities in the cart, and use Ctrl/Cmd + K to jump to search.</p>
+          </div>
+          <div class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700">
+            Fast mode ready
+          </div>
+        </div>
       </div>
 
       <!-- Products Grid -->
@@ -57,6 +66,10 @@
             data-price="{{ medicine.price }}"
             data-stock="{{ medicine.total_quantity }}"
             data-category="{{ medicine.category.id|default:'' }}"
+            onclick="addToCart({{ medicine.id|default:0 }}, '{{ medicine.name|escapejs|default:'' }}', {{ medicine.price|default:0 }}, {{ medicine.total_quantity|default:0 }})"
+            role="button"
+            tabindex="0"
+            onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); addToCart({{ medicine.id|default:0 }}, '{{ medicine.name|escapejs|default:'' }}', {{ medicine.price|default:0 }}, {{ medicine.total_quantity|default:0 }}); }"
           >
             <div class="flex justify-between items-start mb-2">
               <h4 class="font-semibold text-gray-900 text-sm">
@@ -96,7 +109,7 @@
     </div>
 
     <!-- Sale Summary Section -->
-    <div class="bg-white rounded-xl shadow-lg flex flex-col">
+    <div id="sale-summary-section" class="bg-white rounded-xl shadow-lg flex flex-col lg:sticky lg:top-4">
       <!-- Customer Selection -->
       <div class="p-6 border-b border-gray-200">
         <h3 class="text-lg font-semibold text-gray-900 mb-4">Sale Items</h3>
@@ -457,6 +470,7 @@
 
     updateCartDisplay();
     updateTotals();
+    document.getElementById('product-search')?.focus();
   }
 
   // Remove item from cart
@@ -528,6 +542,7 @@
     `
       )
       .join("");
+    updateMobileSummary();
   }
 
   // Update totals
@@ -548,6 +563,7 @@
     document.getElementById("subtotal").textContent = "Ksh " + subtotal.toFixed(2);
     document.getElementById("total").textContent = "Ksh " + total.toFixed(2);
     updatePaymentStatus();
+    updateMobileSummary();
   }
 
   // Clear cart
@@ -699,9 +715,23 @@
     filterProducts();
   }
 
+  document.addEventListener('keydown', function (event) {
+    const searchInput = document.getElementById('product-search');
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      searchInput?.focus();
+      searchInput?.select();
+    }
+
+    if (event.key === 'Escape') {
+      clearFilters();
+    }
+  });
+
   // Ensure the toggle state is correct on page load
   document.addEventListener('DOMContentLoaded', function() {
     toggleNewCustomerFields();
+    updateMobileSummary();
   });
 
   // Get CSRF token

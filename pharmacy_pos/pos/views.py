@@ -332,28 +332,57 @@ def supplier_add(request):
 # Sales Report Views
 @login_required
 def sales_report(request):
-    sales = Sale.objects.order_by('-sale_date').prefetch_related('payments', 'items').select_related('customer', 'served_by')
+    sales_qs = Sale.objects.order_by('-sale_date').prefetch_related('payments', 'items').select_related('customer', 'served_by')
     # Filter by date range if provided
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     payment_method = request.GET.get('payment_method')
     if start_date:
-        sales = sales.filter(sale_date__date__gte=start_date)
+        sales_qs = sales_qs.filter(sale_date__date__gte=start_date)
     if end_date:
-        sales = sales.filter(sale_date__date__lte=end_date)
+        sales_qs = sales_qs.filter(sale_date__date__lte=end_date)
     if payment_method:
-        sales = sales.filter(
+        sales_qs = sales_qs.filter(
             Q(payment_method=payment_method) |
             Q(payments__payment_method=payment_method)
         ).distinct()
-    payment_summary = Payment.objects.filter(sale__in=sales).values('payment_method').annotate(total=Sum('amount'))
-    paginator = Paginator(sales, 10)
+
+    payment_summary = Payment.objects.filter(sale__in=sales_qs).values('payment_method').annotate(total=Sum('amount')).order_by('-total')
+
+    sales_chart_data = list(
+        sales_qs.annotate(day=TruncDate('sale_date')).values('day').annotate(total_sales=Sum('total_amount')).order_by('day')
+    )
+    sales_chart_data = [
+        {
+            'label': item['day'].strftime('%b %d') if item['day'] else 'Unknown',
+            'value': float(item['total_sales'] or 0),
+        }
+        for item in sales_chart_data
+    ]
+
+    top_items = list(
+        SaleItem.objects.filter(sale__in=sales_qs)
+        .values('medicine__name')
+        .annotate(units_sold=Sum('quantity'))
+        .order_by('-units_sold')[:5]
+    )
+    top_items = [
+        {
+            'label': item['medicine__name'],
+            'value': int(item['units_sold'] or 0),
+        }
+        for item in top_items
+    ]
+
+    paginator = Paginator(sales_qs, 10)
     page = request.GET.get('page')
     sales = paginator.get_page(page)
     return render(request, 'pos/sales_report.html', {
         'sales': sales,
         'payment_method': payment_method,
         'payment_summary': payment_summary,
+        'sales_chart_data': sales_chart_data,
+        'top_items': top_items,
     })
 
 @login_required

@@ -67,33 +67,41 @@ const inventoryData = [
 ];
 const invLabels = inventoryData.map(i => i.name);
 const invData = inventoryData.map(i => i.total);
-const ctx = document.getElementById('inventory-summary-chart').getContext('2d');
-new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: invLabels,
-        datasets: [{
-            label: 'Stock',
-            data: invData,
-            backgroundColor: 'rgba(234, 179, 8, 0.7)'
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } }
-    }
-});
+const ctx = document.getElementById('inventory-summary-chart');
+if (ctx && typeof Chart !== 'undefined' && invLabels.length) {
+    new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: invLabels,
+            datasets: [{
+                label: 'Stock',
+                data: invData,
+                backgroundColor: 'rgba(234, 179, 8, 0.7)'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } }
+        }
+    });
+} else if (ctx) {
+    ctx.parentElement.innerHTML += '<div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700">Inventory chart is unavailable right now.</div>';
+}
 // Export to CSV
 function exportInventoryCSV() {
     let csv = 'Medicine,Category,Quantity,Expiry Date,Batch Number,Cost Price,Status\n';
     {% for inv in inventories %}
-    csv += '{{ inv.medicine.name }}'
-        + ',{{ inv.medicine.category.name }}'
+    var medicineName = '{{ inv.medicine.name|escapejs }}';
+    var categoryName = '{{ inv.medicine.category.name|escapejs }}';
+    var batchNumber = '{{ inv.batch_number|escapejs }}';
+    var expireDate = '{{ inv.expiry_date|escapejs }}';
+    csv += medicineName
+        + ',' + categoryName
         + ',{{ inv.quantity }}'
-        + ',{{ inv.expiry_date }}'
-        + ',{{ inv.batch_number }}'
+        + ',' + expireDate
+        + ',' + batchNumber
         + ',{{ inv.cost_price }}'
-        + ',{% if inv.expiry_date < today %}Expired{% elif inv.expiry_date <= today_plus_30 %}Close{% else %}OK{% endif %}' + '\\n';
+        + ',{% if inv.expiry_date < today %}Expired{% elif inv.expiry_date <= today_plus_30 %}Close{% else %}OK{% endif %}\n';
     {% endfor %}
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -104,4 +112,4 @@ function exportInventoryCSV() {
     URL.revokeObjectURL(url);
 }
 </script>
-{% endblock %} 
+{% endblock %}

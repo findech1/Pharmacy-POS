@@ -205,21 +205,25 @@ const paymentData = [
 ];
 const paymentLabels = paymentData.map(i => i.label);
 const paymentTotals = paymentData.map(i => i.total);
-const paymentCtx = document.getElementById('payment-summary-chart').getContext('2d');
-new Chart(paymentCtx, {
-  type: 'doughnut',
-  data: {
-    labels: paymentLabels,
-    datasets: [{
-      data: paymentTotals,
-      backgroundColor: ['#2563eb','#10b981','#f59e0b','#8b5cf6','#ef4444'],
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { position: 'bottom' } }
-  }
-});
+const paymentCtx = document.getElementById('payment-summary-chart');
+if (paymentCtx && typeof Chart !== 'undefined' && paymentLabels.length) {
+  new Chart(paymentCtx.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: paymentLabels,
+      datasets: [{
+        data: paymentTotals,
+        backgroundColor: ['#2563eb','#10b981','#f59e0b','#8b5cf6','#ef4444'],
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } }
+    }
+  });
+} else if (paymentCtx) {
+  paymentCtx.parentElement.innerHTML += '<div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700">Payment chart is unavailable right now.</div>';
+}
 
 const cashierData = [
   {% for item in cashier_summary %}
@@ -228,22 +232,26 @@ const cashierData = [
 ];
 const cashierLabels = cashierData.map(i => i.label);
 const cashierTotals = cashierData.map(i => i.total);
-const cashierCtx = document.getElementById('cashier-summary-chart').getContext('2d');
-new Chart(cashierCtx, {
-  type: 'bar',
-  data: {
-    labels: cashierLabels,
-    datasets: [{
-      label: 'Total Sales',
-      data: cashierTotals,
-      backgroundColor: 'rgba(59, 130, 246, 0.75)'
-    }]
-  },
-  options: {
-    responsive: true,
-    plugins: { legend: { display: false } }
-  }
-});
+const cashierCtx = document.getElementById('cashier-summary-chart');
+if (cashierCtx && typeof Chart !== 'undefined' && cashierLabels.length) {
+  new Chart(cashierCtx.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: cashierLabels,
+      datasets: [{
+        label: 'Total Sales',
+        data: cashierTotals,
+        backgroundColor: 'rgba(59, 130, 246, 0.75)'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } }
+    }
+  });
+} else if (cashierCtx) {
+  cashierCtx.parentElement.innerHTML += '<div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700">Cashier chart is unavailable right now.</div>';
+}
 
 function exportFinancialCSV() {
   let csv = 'Metric,Value\n';

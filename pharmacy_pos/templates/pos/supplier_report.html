@@ -28,32 +28,39 @@
   ];
   const supLabels = supplierData.map(i => i.name);
   const supData = supplierData.map(i => i.total);
-  const ctx = document.getElementById('supplier-summary-chart').getContext('2d');
-  new Chart(ctx, {
-      type: 'bar',
-      data: {
-          labels: supLabels,
-          datasets: [{
-              label: 'Total Purchases',
-              data: supData,
-              backgroundColor: 'rgba(16, 185, 129, 0.7)'
-          }]
-      },
-      options: {
-          responsive: true,
-          plugins: { legend: { display: false } }
-      }
-  });
+  const ctx = document.getElementById('supplier-summary-chart');
+  if (ctx && typeof Chart !== 'undefined' && supLabels.length) {
+    new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: supLabels,
+            datasets: [{
+                label: 'Total Purchases',
+                data: supData,
+                backgroundColor: 'rgba(16, 185, 129, 0.7)'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } }
+        }
+    });
+  } else if (ctx) {
+    ctx.parentElement.innerHTML += '<div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700">Supplier chart is unavailable right now.</div>';
+  }
   // Export to CSV
   function exportSupplierCSV() {
       let csv = 'Supplier,Email,Contact,Total Purchases,Number of Orders\n';
       {% for item in supplier_summary %}
       {% for s in suppliers %}{% if s.name == item.supplier__name %}
-      csv += '{{ item.supplier__name }}'
-          + ',{{ s.email }}'
-          + ',{{ s.contact_number }}'
+      var supplierName = '{{ item.supplier__name|escapejs }}';
+      var supplierEmail = '{{ s.email|escapejs }}';
+      var supplierContact = '{{ s.contact_number|escapejs }}';
+      csv += supplierName
+          + ',' + supplierEmail
+          + ',' + supplierContact
           + ',{{ item.total_purchases|floatformat:2 }}'
-          + ',{{ item.num_orders }}\\n';
+          + ',{{ item.num_orders }}\n';
       {% endif %}{% endfor %}
       {% endfor %}
       const blob = new Blob([csv], { type: 'text/csv' });
