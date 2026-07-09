@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('add-user/', views.add_user, name='add_user'),
+    path('switch-branch/<int:branch_id>/', views.switch_branch, name='switch_branch'),  # <-- add this line
     
     # Medicine URLs
     path('medicines/', views.medicine_list, name='medicine_list'),

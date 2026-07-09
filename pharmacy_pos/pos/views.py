@@ -1,4 +1,3 @@
-# pos/views.py
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate
 from django.contrib.auth.decorators import login_required
@@ -11,10 +10,11 @@ from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .models import Medicine, Inventory, Customer, Sale, Supplier, Order, Category, Payment
+from .models import Medicine, Inventory, Customer, Sale, Supplier, Order, Category, Payment, Branch, SaleItem
 from .forms import *
 from django.views.decorators.csrf import csrf_exempt
 import json
+
 
 def login_view(request):
     if request.method == 'POST':
@@ -28,26 +28,34 @@ def login_view(request):
             messages.error(request, 'Invalid username or password.')
     return render(request, 'registration/login.html')
 
+
 @login_required
 def dashboard(request):
-    # Get dashboard statistics
     total_medicines = Medicine.objects.filter(is_active=True).count()
     total_customers = Customer.objects.count()
     total_suppliers = Supplier.objects.filter(is_active=True).count()
     today = timezone.now().date()
-    today_sales = Sale.objects.filter(sale_date__date=today).aggregate(
+
+    branch_filter = {} if request.active_branch_id is None else {'branch_id': request.active_branch_id}
+
+    today_sales = Sale.objects.filter(sale_date__date=today, **branch_filter).aggregate(
         total=Sum('total_amount')
     )['total'] or 0
-    # Low stock items (less than 10 units)
+
+    low_stock_inv_filter = {} if request.active_branch_id is None else {'inventory__branch_id': request.active_branch_id}
     low_stock = Medicine.objects.filter(
         inventory__quantity__lt=10,
-        is_active=True
+        is_active=True,
+        **low_stock_inv_filter
     ).distinct()
-    # Recent sales
-    recent_sales = Sale.objects.order_by('-sale_date')[:5]
-    # Expiry logic
-    expired = Inventory.objects.filter(expiry_date__lt=today)
-    close_to_expiry = Inventory.objects.filter(expiry_date__gte=today, expiry_date__lte=today + timedelta(days=30))
+
+    recent_sales = Sale.objects.filter(**branch_filter).order_by('-sale_date')[:5]
+
+    expired = Inventory.objects.filter(expiry_date__lt=today, **branch_filter)
+    close_to_expiry = Inventory.objects.filter(
+        expiry_date__gte=today, expiry_date__lte=today + timedelta(days=30), **branch_filter
+    )
+
     context = {
         'total_medicines': total_medicines,
         'total_customers': total_customers,
@@ -59,6 +67,7 @@ def dashboard(request):
         'close_to_expiry': close_to_expiry,
     }
     return render(request, 'pos/dashboard.html', context)
+
 
 @login_required
 def add_user(request):
@@ -72,26 +81,45 @@ def add_user(request):
         form = CustomUserCreationForm()
     return render(request, 'pos/add_user.html', {'form': form})
 
+
+@login_required
+def switch_branch(request, branch_id):
+    profile = request.user.profile
+
+    if branch_id == 0:
+        if profile.role == 'admin':
+            request.session['active_branch_id'] = None
+            messages.success(request, 'Now viewing: All Branches')
+        return redirect(request.META.get('HTTP_REFERER', 'dashboard'))
+
+    if profile.role == 'admin' or profile.get_accessible_branches().filter(id=branch_id).exists():
+        request.session['active_branch_id'] = branch_id
+        branch = Branch.objects.get(id=branch_id)
+        messages.success(request, f'Now viewing: {branch.name}')
+    return redirect(request.META.get('HTTP_REFERER', 'dashboard'))
+
+
 # Medicine Views
 @login_required
 def medicine_list(request):
     search_query = request.GET.get('search', '')
     medicines = Medicine.objects.filter(is_active=True)
-    
+
     if search_query:
         medicines = medicines.filter(
             Q(name__icontains=search_query) |
             Q(category__name__icontains=search_query)
         )
-    
+
     paginator = Paginator(medicines, 10)
     page = request.GET.get('page')
     medicines = paginator.get_page(page)
-    
+
     return render(request, 'pos/medicine_list.html', {
         'medicines': medicines,
         'search_query': search_query
     })
+
 
 @login_required
 def medicine_add(request):
@@ -104,6 +132,7 @@ def medicine_add(request):
     else:
         form = MedicineForm()
     return render(request, 'pos/medicine_form.html', {'form': form, 'title': 'Add Medicine'})
+
 
 @login_required
 def medicine_edit(request, pk):
@@ -118,27 +147,29 @@ def medicine_edit(request, pk):
         form = MedicineForm(instance=medicine)
     return render(request, 'pos/medicine_form.html', {'form': form, 'title': 'Edit Medicine'})
 
+
 # Customer Views
 @login_required
 def customer_list(request):
     search_query = request.GET.get('search', '')
     customers = Customer.objects.all().order_by('name')
-    
+
     if search_query:
         customers = customers.filter(
-            Q(name__icontains=search_query) ,
-            Q(phone__icontains=search_query) ,
+            Q(name__icontains=search_query),
+            Q(phone__icontains=search_query),
             Q(email__icontains=search_query),
         )
-    
+
     paginator = Paginator(customers, 10)
     page = request.GET.get('page')
     customers = paginator.get_page(page)
-    
+
     return render(request, 'pos/customer_list.html', {
         'customers': customers,
         'search_query': search_query
     })
+
 
 @login_required
 def customer_add(request):
@@ -152,22 +183,32 @@ def customer_add(request):
         form = CustomerForm()
     return render(request, 'pos/customer_form.html', {'form': form, 'title': 'Add Customer'})
 
+
 # POS/Sales Views
 @login_required
 def pos_sale(request):
+    if request.active_branch_id is None:
+        messages.warning(request, 'Please select a specific branch before making a sale.')
+        return redirect('dashboard')
+
     medicines = Medicine.objects.filter(is_active=True)
     customers = Customer.objects.all().order_by('name')
     categories = Category.objects.filter(is_active=True)
+    active_branch = Branch.objects.get(id=request.active_branch_id)
     return render(request, 'pos/pos_sale.html', {
         'medicines': medicines,
         'customers': customers,
         'categories': categories,
+        'active_branch': active_branch,
     })
+
 
 @csrf_exempt
 @login_required
 def process_sale(request):
     if request.method == 'POST':
+        if request.active_branch_id is None:
+            return JsonResponse({'success': False, 'error': 'Select a branch before processing a sale.'}, status=400)
         try:
             if request.content_type == 'application/json':
                 data = json.loads(request.body)
@@ -201,7 +242,7 @@ def process_sale(request):
                                 'medicine_id': medicine_id,
                                 'quantity': quantity
                             })
-            # Create or reuse customer for checkout
+
             customer = None
             if customer_id:
                 customer = Customer.objects.filter(id=customer_id).first()
@@ -212,7 +253,7 @@ def process_sale(request):
                     email=new_customer_data.get('email', ''),
                     address=new_customer_data.get('address', ''),
                 )
-            # Calculate totals and validate payments
+
             subtotal = 0
             for item in items:
                 medicine_id = item.get('medicine_id')
@@ -237,6 +278,7 @@ def process_sale(request):
 
             sale_method = 'split' if len(payments) > 1 else payments[0].get('payment_method', 'cash')
             sale = Sale.objects.create(
+                branch_id=request.active_branch_id,
                 customer=customer,
                 payment_method=sale_method,
                 notes=notes,
@@ -275,29 +317,37 @@ def process_sale(request):
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
     return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
 
+
 # Inventory Views
 @login_required
 def inventory_list(request):
-    inventories = Inventory.objects.select_related('medicine').all().order_by('medicine__name')
+    branch_filter = {} if request.active_branch_id is None else {'branch_id': request.active_branch_id}
+    inventories = Inventory.objects.select_related('medicine', 'branch').filter(**branch_filter).order_by('medicine__name')
     return render(request, 'pos/inventory_list.html', {'inventories': inventories})
+
 
 @login_required
 def inventory_add(request):
     if request.method == 'POST':
-        form = InventoryForm(request.POST)
+        form = InventoryForm(request.POST, user=request.user)
         if form.is_valid():
-            form.save()
+            inv = form.save(commit=False)
+            if not request.is_branch_admin:
+                inv.branch_id = request.active_branch_id
+            inv.save()
             messages.success(request, 'Inventory added successfully!')
             return redirect('inventory_list')
     else:
-        form = InventoryForm()
+        form = InventoryForm(user=request.user)
     return render(request, 'pos/inventory_form.html', {'form': form, 'title': 'Add Inventory'})
+
 
 # Category Views
 @login_required
 def category_list(request):
     categories = Category.objects.filter(is_active=True)
     return render(request, 'pos/category_list.html', {'categories': categories})
+
 
 @login_required
 def category_add(request):
@@ -311,11 +361,13 @@ def category_add(request):
         form = CategoryForm()
     return render(request, 'pos/category_form.html', {'form': form, 'title': 'Add Category'})
 
+
 # Supplier Views
 @login_required
 def supplier_list(request):
     suppliers = Supplier.objects.filter(is_active=True).order_by('name')
     return render(request, 'pos/supplier_list.html', {'suppliers': suppliers})
+
 
 @login_required
 def supplier_add(request):
@@ -329,11 +381,14 @@ def supplier_add(request):
         form = SupplierForm()
     return render(request, 'pos/supplier_form.html', {'form': form, 'title': 'Add Supplier'})
 
+
 # Sales Report Views
 @login_required
 def sales_report(request):
-    sales_qs = Sale.objects.order_by('-sale_date').prefetch_related('payments', 'items').select_related('customer', 'served_by')
-    # Filter by date range if provided
+    branch_filter = {} if request.active_branch_id is None else {'branch_id': request.active_branch_id}
+
+    sales_qs = Sale.objects.filter(**branch_filter).order_by('-sale_date').prefetch_related('payments', 'items').select_related('customer', 'served_by', 'branch')
+
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     payment_method = request.GET.get('payment_method')
@@ -385,6 +440,7 @@ def sales_report(request):
         'top_items': top_items,
     })
 
+
 @login_required
 def receipt(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
@@ -394,15 +450,19 @@ def receipt(request, sale_id):
         'sale_items': sale_items,
     })
 
+
 @login_required
 def inventory_report(request):
-    # Filters
+    branch_filter = {} if request.active_branch_id is None else {'branch_id': request.active_branch_id}
+
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     category_id = request.GET.get('category')
     medicine_id = request.GET.get('medicine')
-    expiry_status = request.GET.get('expiry_status')  # new
-    inventories = Inventory.objects.select_related('medicine', 'medicine__category')
+    expiry_status = request.GET.get('expiry_status')
+
+    inventories = Inventory.objects.select_related('medicine', 'medicine__category', 'branch').filter(**branch_filter)
+
     if start_date:
         inventories = inventories.filter(expiry_date__gte=start_date)
     if end_date:
@@ -415,12 +475,13 @@ def inventory_report(request):
         inventories = inventories.filter(expiry_date__lt=timezone.now().date())
     elif expiry_status == 'close':
         inventories = inventories.filter(expiry_date__gte=timezone.now().date(), expiry_date__lte=timezone.now().date() + timedelta(days=30))
-    # Aggregation: total stock per medicine
+
     stock_summary = inventories.values('medicine__name').annotate(
         total_stock=Sum('quantity')
     ).order_by('-total_stock')
-    # Low stock
+
     low_stock = inventories.filter(quantity__lt=10)
+
     context = {
         'stock_summary': list(stock_summary),
         'low_stock': low_stock,
@@ -429,15 +490,18 @@ def inventory_report(request):
     }
     return render(request, 'pos/inventory_report.html', context)
 
+
 @login_required
 def customer_report(request):
-    # Filters
+    branch_filter = {} if request.active_branch_id is None else {'branch_id': request.active_branch_id}
+
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     customer_id = request.GET.get('customer')
 
     customers = Customer.objects.all()
-    sales = Sale.objects.select_related('customer', 'served_by').prefetch_related('payments', 'items').all()
+    sales = Sale.objects.filter(**branch_filter).select_related('customer', 'served_by', 'branch').prefetch_related('payments', 'items')
+
     if start_date:
         sales = sales.filter(sale_date__date__gte=start_date)
     if end_date:
@@ -445,7 +509,6 @@ def customer_report(request):
     if customer_id:
         sales = sales.filter(customer_id=customer_id)
 
-    # Aggregation: total sales per customer
     customer_summary = sales.values(
         'customer__id',
         'customer__name',
@@ -476,9 +539,9 @@ def customer_report(request):
     }
     return render(request, 'pos/customer_report.html', context)
 
+
 @login_required
 def supplier_report(request):
-    # Filters
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     supplier_id = request.GET.get('supplier')
@@ -492,7 +555,6 @@ def supplier_report(request):
     if supplier_id:
         orders = orders.filter(supplier_id=supplier_id)
 
-    # Aggregation: total purchases per supplier
     supplier_summary = orders.values('supplier__name').annotate(
         total_purchases=Sum('total_amount'),
         num_orders=Count('id')
@@ -505,15 +567,18 @@ def supplier_report(request):
     }
     return render(request, 'pos/supplier_report.html', context)
 
+
 @permission_required('pos.view_financial_report', raise_exception=True)
 def financial_report(request):
-    # Filters
+    branch_filter = {} if request.active_branch_id is None else {'branch_id': request.active_branch_id}
+
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     cashier_id = request.GET.get('cashier')
     payment_method = request.GET.get('payment_method')
 
-    sales = Sale.objects.select_related('served_by').prefetch_related('payments').all()
+    sales = Sale.objects.filter(**branch_filter).select_related('served_by', 'branch').prefetch_related('payments')
+
     if start_date:
         sales = sales.filter(sale_date__date__gte=start_date)
     if end_date:
@@ -526,25 +591,21 @@ def financial_report(request):
             Q(payments__payment_method=payment_method)
         ).distinct()
 
-    # Aggregation: total revenue, total tax, total discount
     total_revenue = sales.aggregate(total=Sum('total_amount'))['total'] or 0
     total_tax = sales.aggregate(total=Sum('tax'))['total'] or 0
     total_discount = sales.aggregate(total=Sum('discount'))['total'] or 0
     num_sales = sales.count()
 
-    # Revenue by cashier
     cashier_summary = sales.values('served_by__username').annotate(
         total_sales=Sum('total_amount'),
         num_sales=Count('id')
     ).order_by('-total_sales')
 
-    # Revenue by payment mode
     payment_summary = Payment.objects.filter(sale__in=sales).values('payment_method').annotate(
         total=Sum('amount'),
         count=Count('id')
     ).order_by('-total')
 
-    # Daily and monthly revenue breakdown
     daily_summary = sales.annotate(day=TruncDate('sale_date')).values('day').annotate(
         total_sales=Sum('total_amount'),
         num_sales=Count('id')
@@ -554,6 +615,15 @@ def financial_report(request):
         total_sales=Sum('total_amount'),
         num_sales=Count('id')
     ).order_by('month')
+
+    branch_summary = []
+    if request.active_branch_id is None:
+        branch_summary = list(
+            sales.values('branch__name').annotate(
+                total_sales=Sum('total_amount'),
+                num_sales=Count('id')
+            ).order_by('-total_sales')
+        )
 
     cashiers = User.objects.filter(id__in=sales.values_list('served_by_id', flat=True).distinct())
 
@@ -566,6 +636,7 @@ def financial_report(request):
         'payment_summary': list(payment_summary),
         'daily_summary': list(daily_summary),
         'monthly_summary': list(monthly_summary),
+        'branch_summary': branch_summary,
         'payment_methods': Payment.PAYMENT_METHOD_CHOICES,
         'cashiers': cashiers,
         'start_date': start_date,
@@ -574,3 +645,4 @@ def financial_report(request):
         'selected_payment_method': payment_method,
     }
     return render(request, 'pos/financial_report.html', context)
+    

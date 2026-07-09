@@ -138,42 +138,67 @@
       <!-- Main Content -->
       <div class="flex-1 flex flex-col overflow-hidden">
         <!-- Top Header -->
-        <header class="bg-white shadow-md border-b border-gray-200 px-6 py-4">
-          <div class="flex justify-between items-center">
-            <div>
-              <h2 class="text-2xl font-bold text-gray-800">
-                {% block page_title %}{% endblock %}
-              </h2>
-              <p class="text-gray-600 text-sm">
-                {% block page_description %}{% endblock %}
-              </p>
-            </div>
-            <div class="flex items-center space-x-4">
-              <!-- Date/Time -->
-              <div class="text-right">
-                <p
-                  class="text-sm font-medium text-gray-700"
-                  id="current-date"
-                ></p>
-                <p class="text-xs text-gray-500" id="current-time"></p>
-              </div>
+<header class="bg-white shadow-md border-b border-gray-200 px-6 py-4">
+  <div class="flex justify-between items-center">
+    <div>
+      <h2 class="text-2xl font-bold text-gray-800">
+        {% block page_title %}{% endblock %}
+      </h2>
+      <p class="text-gray-600 text-sm">
+        {% block page_description %}{% endblock %}
+      </p>
+    </div>
+    <div class="flex items-center space-x-4">
 
-              <!-- User Profile -->
-              <div class="flex items-center space-x-3">
-                <div
-                  class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center"
-                >
-                  <span class="text-white font-medium text-sm">
-                    {{ user.first_name.0|default:user.username.0|upper }}
-                  </span>
-                </div>
-                <span class="text-gray-700 font-medium"
-                  >{{ user.first_name|default:user.username }}</span
-                >
-              </div>
-            </div>
-          </div>
-        </header>
+      <!-- Branch Switcher -->
+      {% if user.profile.role == 'admin' %}
+      <div class="relative">
+        <select
+          onchange="window.location.href=this.value"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+        >
+          <option value="{% url 'switch_branch' 0 %}" {% if not active_branch %}selected{% endif %}>
+            🌐 All Branches
+          </option>
+          {% for b in branches %}
+            <option value="{% url 'switch_branch' b.id %}" {% if active_branch.id == b.id %}selected{% endif %}>
+              {{ b.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% elif active_branch %}
+      <div class="flex items-center px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+        <i class="fas fa-store text-blue-500 mr-2 text-sm"></i>
+        <span class="text-sm font-medium text-blue-700">{{ active_branch.name }}</span>
+      </div>
+      {% endif %}
+
+      <!-- Date/Time -->
+      <div class="text-right">
+        <p
+          class="text-sm font-medium text-gray-700"
+          id="current-date"
+        ></p>
+        <p class="text-xs text-gray-500" id="current-time"></p>
+      </div>
+
+      <!-- User Profile -->
+      <div class="flex items-center space-x-3">
+        <div
+          class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center"
+        >
+          <span class="text-white font-medium text-sm">
+            {{ user.first_name.0|default:user.username.0|upper }}
+          </span>
+        </div>
+        <span class="text-gray-700 font-medium"
+          >{{ user.first_name|default:user.username }}</span
+        >
+      </div>
+    </div>
+  </div>
+</header>
 
         <!-- Page Content -->
         <main class="flex-1 overflow-auto p-6">

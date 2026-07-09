@@ -1,8 +1,40 @@
-# pos/models.py
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
 from decimal import Decimal
+
+
+class Branch(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=10, unique=True)  # e.g. KNG, KWG, KIB, BGM
+    location = models.CharField(max_length=255, blank=True)
+    phone_number = models.CharField(max_length=20, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class UserProfile(models.Model):
+    ROLE_CHOICES = [
+        ('admin', 'System Admin'),
+        ('branch_manager', 'Branch Manager'),
+        ('pharmacist', 'Pharmacist'),
+        ('cashier', 'Cashier'),
+    ]
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, null=True, blank=True, related_name='staff')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='cashier')
+
+    def __str__(self):
+        return f"{self.user.username} ({self.get_role_display()})"
+
+    def get_accessible_branches(self):
+        if self.role == 'admin':
+            return Branch.objects.filter(is_active=True)
+        return Branch.objects.filter(id=self.branch_id, is_active=True) if self.branch_id else Branch.objects.none()
+
 
 class Category(models.Model):
     name = models.CharField(max_length=50)
@@ -17,6 +49,7 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+
 class Supplier(models.Model):
     name = models.CharField(max_length=100)
     contact_number = models.CharField(max_length=20)
@@ -28,6 +61,7 @@ class Supplier(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class Medicine(models.Model):
     name = models.CharField(max_length=100)
@@ -46,6 +80,7 @@ class Medicine(models.Model):
     def total_quantity(self):
         return sum(inv.quantity for inv in self.inventory_set.all())
 
+
 class Customer(models.Model):
     name = models.CharField(max_length=100)
     phone = models.CharField(max_length=20, blank=True)
@@ -57,7 +92,9 @@ class Customer(models.Model):
     def __str__(self):
         return self.name
 
+
 class Inventory(models.Model):
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='inventory_items', null=True, blank=True)
     medicine = models.ForeignKey(Medicine, on_delete=models.CASCADE)
     quantity = models.IntegerField(validators=[MinValueValidator(0)])
     expiry_date = models.DateField()
@@ -70,7 +107,9 @@ class Inventory(models.Model):
         verbose_name_plural = "Inventories"
 
     def __str__(self):
-        return f"{self.medicine.name} - {self.quantity} units"
+        branch_code = self.branch.code if self.branch_id else 'N/A'
+        return f"{self.medicine.name} - {self.quantity} units ({branch_code})"
+
 
 class Order(models.Model):
     ORDER_STATUS = [
@@ -78,7 +117,7 @@ class Order(models.Model):
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
     ]
-    
+
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
     order_date = models.DateField(auto_now_add=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -91,7 +130,9 @@ class Order(models.Model):
     def __str__(self):
         return f"Order #{self.id} - {self.supplier.name}"
 
+
 class Sale(models.Model):
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='sales', null=True, blank=True)
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True, blank=True)
     sale_date = models.DateTimeField(auto_now_add=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -124,6 +165,7 @@ class Sale(models.Model):
             for p in payments
         )
 
+
 class Payment(models.Model):
     PAYMENT_METHOD_CHOICES = [
         ('cash', 'Cash'),
@@ -139,6 +181,7 @@ class Payment(models.Model):
     def __str__(self):
         return f"{self.get_payment_method_display()} - Ksh {self.amount:.2f}"
 
+
 class SaleItem(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name='items')
     medicine = models.ForeignKey(Medicine, on_delete=models.CASCADE)
@@ -153,9 +196,13 @@ class SaleItem(models.Model):
         with transaction.atomic():
             super().save(*args, **kwargs)
             if is_new:
-                # Reduce quantity from the latest (non-expired) inventory batches
                 qty_to_deduct = self.quantity
-                inventories = Inventory.objects.filter(medicine=self.medicine, quantity__gt=0, expiry_date__gte=models.functions.Now()).order_by('expiry_date')
+                inventories = Inventory.objects.filter(
+                    branch=self.sale.branch,
+                    medicine=self.medicine,
+                    quantity__gt=0,
+                    expiry_date__gte=models.functions.Now()
+                ).order_by('expiry_date')
                 for inv in inventories:
                     if qty_to_deduct <= 0:
                         break
@@ -163,9 +210,8 @@ class SaleItem(models.Model):
                     inv.quantity -= deduct
                     inv.save()
                     qty_to_deduct -= deduct
-                # Optionally, handle if not enough stock
                 if qty_to_deduct > 0:
-                    raise ValueError(f"Not enough stock for {self.medicine.name}")
+                    raise ValueError(f"Not enough stock for {self.medicine.name} at {self.sale.branch}")
 
     def __str__(self):
         return f"{self.medicine.name} x {self.quantity}"
