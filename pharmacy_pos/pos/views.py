@@ -645,4 +645,3 @@ def financial_report(request):
         'selected_payment_method': payment_method,
     }
     return render(request, 'pos/financial_report.html', context)
-    
