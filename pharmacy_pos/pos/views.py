@@ -194,15 +194,30 @@ def pos_sale(request):
         messages.warning(request, 'Please select a specific branch before making a sale.')
         return redirect('dashboard')
 
-    medicines = Medicine.objects.filter(is_active=True)
+    from django.db.models import Value, IntegerField
+    from django.db.models.functions import Coalesce
+
+    medicines = Medicine.objects.filter(is_active=True).annotate(
+        branch_stock=Coalesce(
+            Sum('inventory__quantity', filter=Q(inventory__branch_id=request.active_branch_id)),
+            Value(0), output_field=IntegerField()
+        )
+    )
     customers = Customer.objects.all().order_by('name')
     categories = Category.objects.filter(is_active=True)
     active_branch = Branch.objects.get(id=request.active_branch_id)
+
+    # Dispensed prescription items not yet linked to a completed sale at this branch
+    pending_dispensing = DispensingLog.objects.filter(
+        branch_id=request.active_branch_id, sale__isnull=True
+    ).select_related('prescription_item__medicine', 'prescription_item__prescription__patient').order_by('-dispensed_at')
+
     return render(request, 'pos/pos_sale.html', {
         'medicines': medicines,
         'customers': customers,
         'categories': categories,
         'active_branch': active_branch,
+        'pending_dispensing': pending_dispensing,
     })
 
 
@@ -222,7 +237,9 @@ def process_sale(request):
                 discount = float(data.get('discount_percent', 0))
                 tax = float(data.get('tax_percent', 0))
                 items = data.get('items', [])
+                dispensing_log_ids = data.get('dispensing_log_ids', [])
             else:
+                dispensing_log_ids = request.POST.getlist('dispensing_log_ids')
                 customer_id = request.POST.get('customer_id')
                 customer_type = request.POST.get('customer_type')
                 new_customer_data = {
@@ -335,6 +352,12 @@ def process_sale(request):
                     amount=round(float(payment.get('amount', 0)), 2),
                     reference_number=payment.get('reference_number', '').strip()
                 )
+
+            if dispensing_log_ids:
+                DispensingLog.objects.filter(
+                    id__in=dispensing_log_ids, branch_id=request.active_branch_id, sale__isnull=True
+                ).update(sale=sale)
+
             return JsonResponse({'success': True, 'sale_id': sale.id})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
