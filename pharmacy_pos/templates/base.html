@@ -75,6 +75,14 @@
           </a>
 
           <a
+            href="{% url 'prescription_list' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'prescription' in request.resolver_match.url_name %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-file-prescription w-5 mr-3"></i>
+            <span>Prescriptions</span>
+          </a>
+
+          <a
             href="{% url 'customer_list' %}"
             class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'customer' in request.resolver_match.url_name %}sidebar-active{% endif %}"
           >

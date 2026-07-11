@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, RegexValidator
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
+from datetime import timedelta
 from decimal import Decimal
 
 
@@ -22,6 +25,7 @@ class UserProfile(models.Model):
         ('branch_manager', 'Branch Manager'),
         ('pharmacist', 'Pharmacist'),
         ('cashier', 'Cashier'),
+        ('inventory_manager', 'Inventory Manager'),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT, null=True, blank=True, related_name='staff')
@@ -69,6 +73,9 @@ class Medicine(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     description = models.TextField(blank=True)
     manufacturer = models.CharField(max_length=100, blank=True)
+    generic_name = models.CharField(max_length=150, blank=True, help_text="Clinical/active-ingredient name.")
+    is_controlled_substance = models.BooleanField(default=False)
+    barcode = models.CharField(max_length=50, blank=True, unique=True, null=True, help_text="Scannable SKU/barcode identifier.")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -97,6 +104,7 @@ class Inventory(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='inventory_items', null=True, blank=True)
     medicine = models.ForeignKey(Medicine, on_delete=models.CASCADE)
     quantity = models.IntegerField(validators=[MinValueValidator(0)])
+    reorder_level = models.PositiveIntegerField(default=10, help_text="Triggers low-stock alert when quantity falls at or below this.")
     expiry_date = models.DateField()
     batch_number = models.CharField(max_length=50, blank=True)
     cost_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
@@ -110,6 +118,14 @@ class Inventory(models.Model):
         branch_code = self.branch.code if self.branch_id else 'N/A'
         return f"{self.medicine.name} - {self.quantity} units ({branch_code})"
 
+    @property
+    def is_low_stock(self):
+        return self.quantity <= self.reorder_level
+
+    @property
+    def is_expired(self):
+        return self.expiry_date < timezone.now().date()
+
 
 class Order(models.Model):
     ORDER_STATUS = [
@@ -118,6 +134,7 @@ class Order(models.Model):
         ('cancelled', 'Cancelled'),
     ]
 
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
     order_date = models.DateField(auto_now_add=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -215,3 +232,120 @@ class SaleItem(models.Model):
 
     def __str__(self):
         return f"{self.medicine.name} x {self.quantity}"
+
+
+# ---------------------------------------------------------------------------
+# Patient Profile & Prescription Lifecycle Management (SRS Section 3.3)
+# ---------------------------------------------------------------------------
+
+doctor_license_validator = RegexValidator(
+    regex=r'^[A-Z]{2,4}-\d{4,8}$',
+    message="Doctor license must match the format XX-NNNNN (e.g., PPB-102345)."
+)
+
+
+class DrugInteraction(models.Model):
+    SEVERITY_CHOICES = [
+        ('moderate', 'Moderate'),
+        ('severe', 'Severe'),
+    ]
+    medicine_a = models.ForeignKey(Medicine, on_delete=models.CASCADE, related_name='interactions_as_a')
+    medicine_b = models.ForeignKey(Medicine, on_delete=models.CASCADE, related_name='interactions_as_b')
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='moderate')
+    description = models.TextField(help_text="Clinical explanation of the interaction risk.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('medicine_a', 'medicine_b')
+
+    def clean(self):
+        if self.medicine_a_id == self.medicine_b_id:
+            raise DjangoValidationError("A medicine cannot interact with itself.")
+
+    def __str__(self):
+        return f"{self.medicine_a.name} \u26a0 {self.medicine_b.name} ({self.severity})"
+
+    @staticmethod
+    def check_interaction(medicine_a_id, medicine_b_id):
+        """Returns the DrugInteraction record if these two medicines interact, else None."""
+        return DrugInteraction.objects.filter(
+            models.Q(medicine_a_id=medicine_a_id, medicine_b_id=medicine_b_id) |
+            models.Q(medicine_a_id=medicine_b_id, medicine_b_id=medicine_a_id)
+        ).first()
+
+
+class Prescription(models.Model):
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='prescriptions')
+    patient = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='prescriptions')
+    doctor_name = models.CharField(max_length=100)
+    doctor_license_number = models.CharField(max_length=20, validators=[doctor_license_validator])
+    diagnosis_notes = models.TextField(blank=True)
+    validated_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='validated_prescriptions')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Prescription #{self.id} - {self.patient.name} ({self.created_at.strftime('%Y-%m-%d')})"
+
+    def has_controlled_substances(self):
+        return self.items.filter(medicine__is_controlled_substance=True).exists()
+
+
+class PrescriptionItem(models.Model):
+    prescription = models.ForeignKey(Prescription, on_delete=models.CASCADE, related_name='items')
+    medicine = models.ForeignKey(Medicine, on_delete=models.PROTECT)
+    dosage_instructions = models.CharField(max_length=255)
+    quantity_per_refill = models.PositiveIntegerField()
+    refill_interval_days = models.PositiveIntegerField(default=30, help_text="Days between authorized refills.")
+    total_refills_allowed = models.PositiveIntegerField(default=1)
+    refills_used = models.PositiveIntegerField(default=0)
+    last_dispensed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.medicine.name} \u2014 {self.dosage_instructions}"
+
+    @property
+    def refills_remaining(self):
+        return max(self.total_refills_allowed - self.refills_used, 0)
+
+    def can_dispense_now(self):
+        """REQ-MED-3.3: locks refill actions until the authorized interval has passed."""
+        if self.refills_remaining <= 0:
+            return False, "No refills remaining on this prescription item."
+        if self.last_dispensed_at is None:
+            return True, None
+        next_allowed = self.last_dispensed_at + timedelta(days=self.refill_interval_days)
+        if timezone.now() < next_allowed:
+            return False, f"Next refill not authorized until {next_allowed.strftime('%Y-%m-%d')}."
+        return True, None
+
+    def check_interactions_against_active_history(self):
+        """
+        REQ-MED-3.2: checks this medicine against the patient's other prescriptions
+        dispensed within the last 30 days. Returns a list of (other_item, interaction) tuples.
+        """
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        recent_items = PrescriptionItem.objects.filter(
+            prescription__patient=self.prescription.patient,
+            last_dispensed_at__gte=thirty_days_ago,
+        ).exclude(id=self.id).exclude(medicine_id=self.medicine_id)
+
+        flagged = []
+        for other in recent_items:
+            interaction = DrugInteraction.check_interaction(self.medicine_id, other.medicine_id)
+            if interaction:
+                flagged.append((other, interaction))
+        return flagged
+
+
+class DispensingLog(models.Model):
+    """Immutable ledger - one row per actual dispensing event (the 'Dispensary Release' action)."""
+    prescription_item = models.ForeignKey(PrescriptionItem, on_delete=models.PROTECT, related_name='dispensing_logs')
+    quantity_dispensed = models.PositiveIntegerField()
+    dispensed_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='dispensing_actions')
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='dispensing_logs')
+    sale = models.ForeignKey(Sale, on_delete=models.SET_NULL, null=True, blank=True, related_name='dispensing_logs')
+    interaction_warning_acknowledged = models.BooleanField(default=False)
+    dispensed_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Dispensed {self.quantity_dispensed}x {self.prescription_item.medicine.name}"

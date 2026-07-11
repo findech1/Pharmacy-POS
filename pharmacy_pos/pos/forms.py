@@ -1,4 +1,5 @@
 from django import forms
+from django.forms import inlineformset_factory
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from .models import *
@@ -58,7 +59,7 @@ class SupplierForm(forms.ModelForm):
 class MedicineForm(forms.ModelForm):
     class Meta:
         model = Medicine
-        fields = ['name', 'category', 'price', 'description', 'manufacturer', 'is_active']
+        fields = ['name', 'category', 'price', 'description', 'manufacturer', 'generic_name', 'is_controlled_substance', 'barcode', 'is_active']
 
 
 class CustomerForm(forms.ModelForm):
@@ -87,7 +88,7 @@ class CustomerForm(forms.ModelForm):
 class InventoryForm(forms.ModelForm):
     class Meta:
         model = Inventory
-        fields = ['branch', 'medicine', 'quantity', 'expiry_date', 'batch_number', 'cost_price']
+        fields = ['branch', 'medicine', 'quantity', 'reorder_level', 'expiry_date', 'batch_number', 'cost_price']
         widgets = {
             'expiry_date': forms.DateInput(attrs={'type': 'date'}),
         }
@@ -106,4 +107,37 @@ class SaleForm(forms.ModelForm):
     class Meta:
         model = Sale
         fields = ['customer', 'payment_method', 'discount', 'tax']
-        
+
+
+# ---------------------------------------------------------------------------
+# Patient Profile & Prescription Lifecycle Management
+# ---------------------------------------------------------------------------
+
+class PrescriptionForm(forms.ModelForm):
+    class Meta:
+        model = Prescription
+        fields = ['patient', 'doctor_name', 'doctor_license_number', 'diagnosis_notes']
+
+
+class PrescriptionItemForm(forms.ModelForm):
+    class Meta:
+        model = PrescriptionItem
+        fields = ['medicine', 'dosage_instructions', 'quantity_per_refill', 'refill_interval_days', 'total_refills_allowed']
+
+
+PrescriptionItemFormSet = inlineformset_factory(
+    Prescription, PrescriptionItem,
+    form=PrescriptionItemForm,
+    extra=1, can_delete=True
+)
+
+
+class DispenseForm(forms.Form):
+    quantity = forms.IntegerField(min_value=1)
+    interaction_acknowledged = forms.BooleanField(required=False)
+
+
+class DrugInteractionForm(forms.ModelForm):
+    class Meta:
+        model = DrugInteraction
+        fields = ['medicine_a', 'medicine_b', 'severity', 'description']

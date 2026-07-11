@@ -10,7 +10,10 @@ from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .models import Medicine, Inventory, Customer, Sale, Supplier, Order, Category, Payment, Branch, SaleItem
+from .models import (
+    Medicine, Inventory, Customer, Sale, Supplier, Order, Category, Payment,
+    Branch, SaleItem, Prescription, PrescriptionItem, DispensingLog, DrugInteraction
+)
 from .forms import *
 from django.views.decorators.csrf import csrf_exempt
 import json
@@ -44,7 +47,7 @@ def dashboard(request):
 
     low_stock_inv_filter = {} if request.active_branch_id is None else {'inventory__branch_id': request.active_branch_id}
     low_stock = Medicine.objects.filter(
-        inventory__quantity__lt=10,
+        inventory__quantity__lte=F('inventory__reorder_level'),
         is_active=True,
         **low_stock_inv_filter
     ).distinct()
@@ -242,6 +245,26 @@ def process_sale(request):
                                 'medicine_id': medicine_id,
                                 'quantity': quantity
                             })
+
+            # REQ-POS-1.3 / REQ-INV-2.1: pre-checkout hard block on expired batches
+            today = timezone.now().date()
+            for item in items:
+                medicine_id = item.get('medicine_id')
+                quantity = int(item.get('quantity', 0))
+                if quantity <= 0 or not medicine_id:
+                    continue
+                available_qty = Inventory.objects.filter(
+                    branch_id=request.active_branch_id,
+                    medicine_id=medicine_id,
+                    expiry_date__gte=today,
+                    quantity__gt=0,
+                ).aggregate(total=Sum('quantity'))['total'] or 0
+                if available_qty < quantity:
+                    med_name = Medicine.objects.filter(id=medicine_id).values_list('name', flat=True).first()
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'BLOCKED: {med_name or "Item"} has no valid (non-expired) stock covering the requested quantity at this branch.'
+                    }, status=400)
 
             customer = None
             if customer_id:
@@ -480,7 +503,7 @@ def inventory_report(request):
         total_stock=Sum('quantity')
     ).order_by('-total_stock')
 
-    low_stock = inventories.filter(quantity__lt=10)
+    low_stock = inventories.filter(quantity__lte=F('reorder_level'))
 
     context = {
         'stock_summary': list(stock_summary),
@@ -645,3 +668,111 @@ def financial_report(request):
         'selected_payment_method': payment_method,
     }
     return render(request, 'pos/financial_report.html', context)
+
+
+# ---------------------------------------------------------------------------
+# Patient Profile & Prescription Lifecycle Management
+# ---------------------------------------------------------------------------
+
+@login_required
+def prescription_list(request):
+    branch_filter = {} if request.active_branch_id is None else {'branch_id': request.active_branch_id}
+    prescriptions = Prescription.objects.filter(**branch_filter).select_related('patient', 'validated_by').order_by('-created_at')
+    return render(request, 'pos/prescription_list.html', {'prescriptions': prescriptions})
+
+
+@login_required
+def prescription_add(request):
+    if request.active_branch_id is None:
+        messages.warning(request, 'Please select a specific branch before creating a prescription.')
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        form = PrescriptionForm(request.POST)
+        if form.is_valid():
+            prescription = form.save(commit=False)
+            prescription.branch_id = request.active_branch_id
+            prescription.validated_by = request.user
+            prescription.save()
+
+            formset = PrescriptionItemFormSet(request.POST, instance=prescription)
+            if formset.is_valid():
+                formset.save()
+                # REQ-MED-3.1: doctor license is mandatory for controlled substances
+                if prescription.has_controlled_substances() and not prescription.doctor_license_number:
+                    messages.error(request, 'A valid doctor license number is required for controlled substances.')
+                    prescription.delete()
+                    return redirect('prescription_add')
+                messages.success(request, 'Prescription recorded successfully.')
+                return redirect('prescription_detail', pk=prescription.pk)
+            else:
+                prescription.delete()
+    else:
+        form = PrescriptionForm()
+        formset = PrescriptionItemFormSet()
+
+    return render(request, 'pos/prescription_form.html', {
+        'form': form, 'formset': formset, 'title': 'New Prescription'
+    })
+
+
+@login_required
+def prescription_detail(request, pk):
+    prescription = get_object_or_404(Prescription, pk=pk)
+    items_with_status = []
+    for item in prescription.items.select_related('medicine'):
+        can_dispense, reason = item.can_dispense_now()
+        interactions = item.check_interactions_against_active_history()
+        items_with_status.append({
+            'item': item,
+            'can_dispense': can_dispense,
+            'block_reason': reason,
+            'interactions': interactions,
+        })
+    return render(request, 'pos/prescription_detail.html', {
+        'prescription': prescription,
+        'items_with_status': items_with_status,
+    })
+
+
+@login_required
+def dispense_item(request, item_id):
+    """The 'Dispensary Release' action - REQ-MED-3.2, REQ-MED-3.3."""
+    item = get_object_or_404(PrescriptionItem, id=item_id)
+
+    can_dispense, reason = item.can_dispense_now()
+    if not can_dispense:
+        messages.error(request, reason)
+        return redirect('prescription_detail', pk=item.prescription_id)
+
+    interactions = item.check_interactions_against_active_history()
+
+    if request.method == 'POST':
+        form = DispenseForm(request.POST)
+        if form.is_valid():
+            quantity = form.cleaned_data['quantity']
+            acknowledged = form.cleaned_data['interaction_acknowledged']
+
+            if interactions and not acknowledged:
+                messages.error(request, 'Severe drug interaction detected - acknowledgement required before dispensing.')
+                return redirect('prescription_detail', pk=item.prescription_id)
+
+            if quantity > item.quantity_per_refill:
+                messages.error(request, f'Cannot dispense more than the authorized {item.quantity_per_refill} units per refill.')
+                return redirect('prescription_detail', pk=item.prescription_id)
+
+            DispensingLog.objects.create(
+                prescription_item=item,
+                quantity_dispensed=quantity,
+                dispensed_by=request.user,
+                branch_id=request.active_branch_id,
+                interaction_warning_acknowledged=bool(interactions),
+            )
+            item.refills_used += 1
+            item.last_dispensed_at = timezone.now()
+            item.save()
+
+            messages.success(request, f'{quantity}x {item.medicine.name} dispensed. Proceed to checkout to complete the sale.')
+            return redirect('prescription_detail', pk=item.prescription_id)
+
+    return redirect('prescription_detail', pk=item.prescription_id)
