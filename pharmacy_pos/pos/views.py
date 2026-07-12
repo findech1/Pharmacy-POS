@@ -422,6 +422,31 @@ def inventory_add(request):
     return render(request, 'pos/inventory_form.html', {'form': form, 'title': 'Add Inventory'})
 
 
+@login_required
+def inventory_edit(request, pk):
+    inventory = get_object_or_404(Inventory, pk=pk)
+
+    if not request.is_branch_admin and inventory.branch_id != request.active_branch_id:
+        messages.error(request, 'You do not have permission to edit inventory outside your assigned branch.')
+        return redirect('inventory_list')
+
+    if request.method == 'POST':
+        form = InventoryForm(request.POST, instance=inventory, user=request.user)
+        if form.is_valid():
+            changed_fields = form.changed_data
+            inv = form.save(commit=False)
+            if not request.is_branch_admin:
+                inv.branch_id = inventory.branch_id  # non-admins can't reassign branch
+            inv.save()
+            log_audit(request, 'update', obj=inv,
+                      details=f'Updated fields: {", ".join(changed_fields) if changed_fields else "none"}.')
+            messages.success(request, 'Inventory updated successfully!')
+            return redirect('inventory_list')
+    else:
+        form = InventoryForm(instance=inventory, user=request.user)
+    return render(request, 'pos/inventory_form.html', {'form': form, 'title': 'Edit Inventory'})
+
+
 # Category Views
 @login_required
 def category_list(request):
