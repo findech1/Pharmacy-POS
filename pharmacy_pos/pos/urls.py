@@ -7,6 +7,8 @@ urlpatterns = [
     path('add-user/', views.add_user, name='add_user'),
     path('switch-branch/<int:branch_id>/', views.switch_branch, name='switch_branch'),
     path('audit-log/', views.audit_log_list, name='audit_log_list'),
+    path('reorder-alerts/', views.reorder_alerts, name='reorder_alerts'),
+    path('reorder-alerts/create/', views.create_reorder, name='create_reorder'),
 
     # Medicine URLs
     path('medicines/', views.medicine_list, name='medicine_list'),

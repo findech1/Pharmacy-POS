@@ -99,6 +99,14 @@
           </a>
 
           <a
+            href="{% url 'reorder_alerts' %}"
+            class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'reorder' in request.resolver_match.url_name %}sidebar-active{% endif %}"
+          >
+            <i class="fas fa-triangle-exclamation w-5 mr-3"></i>
+            <span>Reorder Alerts</span>
+          </a>
+
+          <a
             href="{% url 'category_list' %}"
             class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200 {% if 'categor' in request.resolver_match.url_name %}sidebar-active{% endif %}"
           >

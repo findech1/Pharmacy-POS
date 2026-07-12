@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block header %}Reorder Alerts{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto p-4">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">
+            <i class="fas fa-triangle-exclamation mr-2 text-yellow-500"></i>Reorder Alerts
+        </h1>
+        <a href="{% url 'inventory_list' %}" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            View full inventory <i class="fas fa-arrow-right ml-1"></i>
+        </a>
+    </div>
+
+    {% if alerts %}
+    <form method="post" action="{% url 'create_reorder' %}">
+        {% csrf_token %}
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left"><input type="checkbox" onclick="toggleAll(this)"></th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Medicine</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Stock</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reorder Level</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Suggested Reorder Qty</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expiry</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for alert in alerts %}
+                    <tr class="{% if alert.item.is_expired %}bg-red-50{% else %}bg-yellow-50{% endif %}">
+                        <td class="px-4 py-3">
+                            <input type="checkbox" name="item_ids" value="{{ alert.item.id }}" class="item-checkbox">
+                        </td>
+                        <td class="px-4 py-3 font-medium text-gray-800">{{ alert.item.medicine.name }}</td>
+                        <td class="px-4 py-3 text-red-600 font-semibold">{{ alert.item.quantity }}</td>
+                        <td class="px-4 py-3 text-gray-600">{{ alert.item.reorder_level }}</td>
+                        <td class="px-4 py-3 text-gray-800 font-medium">{{ alert.suggested_qty }}</td>
+                        <td class="px-4 py-3 text-gray-500 text-sm">
+                            {{ alert.item.expiry_date }}
+                            {% if alert.item.is_expired %}<span class="text-red-600 text-xs">(expired)</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-lg p-6 flex flex-wrap items-end gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Supplier</label>
+                <select name="supplier_id" required class="px-3 py-2 border border-gray-300 rounded-lg w-64">
+                    <option value="" disabled selected>Select a supplier</option>
+                    {% for supplier in suppliers %}
+                    <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+                    {% empty %}
+                    <option value="" disabled>No active suppliers — add one first</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-file-invoice mr-2"></i>Create Draft Purchase Order
+            </button>
+        </div>
+    </form>
+    {% else %}
+    <div class="bg-white rounded-xl shadow-lg p-12 text-center text-gray-500">
+        <i class="fas fa-circle-check text-4xl text-green-400 mb-3"></i>
+        <p>All stock levels are healthy at this branch — nothing needs reordering right now.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    function toggleAll(source) {
+        document.querySelectorAll('.item-checkbox').forEach(function (cb) {
+            cb.checked = source.checked;
+        });
+    }
+</script>
+{% endblock %}

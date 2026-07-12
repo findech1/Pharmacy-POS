@@ -447,6 +447,75 @@ def inventory_edit(request, pk):
     return render(request, 'pos/inventory_form.html', {'form': form, 'title': 'Edit Inventory'})
 
 
+@login_required
+def reorder_alerts(request):
+    if request.active_branch_id is None:
+        messages.warning(request, 'Please select a specific branch to view reorder alerts.')
+        return redirect('dashboard')
+
+    low_stock_items = Inventory.objects.select_related('medicine', 'branch').filter(
+        branch_id=request.active_branch_id,
+        quantity__lte=F('reorder_level'),
+    ).order_by('medicine__name')
+
+    alerts = []
+    for item in low_stock_items:
+        suggested_qty = max(item.reorder_level * 2 - item.quantity, item.reorder_level)
+        alerts.append({'item': item, 'suggested_qty': suggested_qty})
+
+    suppliers = Supplier.objects.filter(is_active=True).order_by('name')
+
+    return render(request, 'pos/reorder_alerts.html', {
+        'alerts': alerts,
+        'suppliers': suppliers,
+    })
+
+
+@login_required
+def create_reorder(request):
+    if request.method != 'POST':
+        return redirect('reorder_alerts')
+
+    if request.active_branch_id is None:
+        messages.warning(request, 'Please select a specific branch to create a reorder.')
+        return redirect('dashboard')
+
+    supplier_id = request.POST.get('supplier_id')
+    item_ids = request.POST.getlist('item_ids')
+
+    if not supplier_id or not item_ids:
+        messages.error(request, 'Select a supplier and at least one item to reorder.')
+        return redirect('reorder_alerts')
+
+    supplier = get_object_or_404(Supplier, id=supplier_id)
+    items = Inventory.objects.filter(
+        id__in=item_ids, branch_id=request.active_branch_id
+    ).select_related('medicine')
+
+    if not items.exists():
+        messages.error(request, 'No matching items found for this branch.')
+        return redirect('reorder_alerts')
+
+    lines = []
+    for item in items:
+        suggested_qty = max(item.reorder_level * 2 - item.quantity, item.reorder_level)
+        lines.append(f"{item.medicine.name}: current stock {item.quantity}, reorder {suggested_qty} units")
+
+    order = Order.objects.create(
+        branch_id=request.active_branch_id,
+        supplier=supplier,
+        status='pending',
+        notes="Auto-generated reorder request:\n" + "\n".join(lines),
+        created_by=request.user,
+    )
+
+    log_audit(request, 'create', obj=order,
+              details=f'Draft reorder #{order.id} created for {items.count()} low-stock item(s) from {supplier.name}.')
+
+    messages.success(request, f'Draft purchase order #{order.id} created for {supplier.name}.')
+    return redirect('reorder_alerts')
+
+
 # Category Views
 @login_required
 def category_list(request):
