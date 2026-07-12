@@ -141,3 +141,26 @@ class DrugInteractionForm(forms.ModelForm):
     class Meta:
         model = DrugInteraction
         fields = ['medicine_a', 'medicine_b', 'severity', 'description']
+
+
+# ---------------------------------------------------------------------------
+# Purchase Order Line-Item Workflow
+# ---------------------------------------------------------------------------
+
+class OrderForm(forms.ModelForm):
+    class Meta:
+        model = Order
+        fields = ['supplier', 'notes']
+
+
+class OrderItemForm(forms.ModelForm):
+    class Meta:
+        model = OrderItem
+        fields = ['medicine', 'quantity_ordered', 'unit_cost']
+
+
+OrderItemFormSet = inlineformset_factory(
+    Order, OrderItem,
+    form=OrderItemForm,
+    extra=1, can_delete=True
+)

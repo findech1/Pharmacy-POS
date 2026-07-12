@@ -4,14 +4,14 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.models import User
 from django.contrib import messages
-from django.db.models import Sum, Count, Q, F
-from django.db.models.functions import TruncDate, TruncMonth
+from django.db.models import Sum, Count, Q, F, Value, IntegerField
+from django.db.models.functions import TruncDate, TruncMonth, Coalesce
 from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.utils import timezone
 from datetime import datetime, timedelta
 from .models import (
-    Medicine, Inventory, Customer, Sale, Supplier, Order, Category, Payment,
+    Medicine, Inventory, Customer, Sale, Supplier, Order, OrderItem, Category, Payment,
     Branch, SaleItem, Prescription, PrescriptionItem, DispensingLog, DrugInteraction, AuditLog
 )
 from .forms import *
@@ -223,9 +223,6 @@ def pos_sale(request):
         messages.warning(request, 'Please select a specific branch before making a sale.')
         return redirect('dashboard')
 
-    from django.db.models import Value, IntegerField
-    from django.db.models.functions import Coalesce
-
     medicines = Medicine.objects.filter(is_active=True).annotate(
         branch_stock=Coalesce(
             Sum('inventory__quantity', filter=Q(inventory__branch_id=request.active_branch_id)),
@@ -247,6 +244,34 @@ def pos_sale(request):
         'categories': categories,
         'active_branch': active_branch,
         'pending_dispensing': pending_dispensing,
+    })
+
+
+@login_required
+def barcode_lookup(request):
+    """Keyboard-wedge barcode scanner support — looks up a medicine by scanned code."""
+    code = request.GET.get('code', '').strip()
+    if not code:
+        return JsonResponse({'success': False, 'error': 'No barcode provided.'})
+    if request.active_branch_id is None:
+        return JsonResponse({'success': False, 'error': 'Select a branch first.'})
+
+    medicine = Medicine.objects.filter(barcode=code, is_active=True).annotate(
+        branch_stock=Coalesce(
+            Sum('inventory__quantity', filter=Q(inventory__branch_id=request.active_branch_id)),
+            Value(0), output_field=IntegerField()
+        )
+    ).first()
+
+    if not medicine:
+        return JsonResponse({'success': False, 'error': f'No medicine found for barcode "{code}".'})
+
+    return JsonResponse({
+        'success': True,
+        'id': medicine.id,
+        'name': medicine.name,
+        'price': float(medicine.price),
+        'stock': medicine.branch_stock,
     })
 
 
@@ -496,24 +521,29 @@ def create_reorder(request):
         messages.error(request, 'No matching items found for this branch.')
         return redirect('reorder_alerts')
 
-    lines = []
-    for item in items:
-        suggested_qty = max(item.reorder_level * 2 - item.quantity, item.reorder_level)
-        lines.append(f"{item.medicine.name}: current stock {item.quantity}, reorder {suggested_qty} units")
-
     order = Order.objects.create(
         branch_id=request.active_branch_id,
         supplier=supplier,
         status='pending',
-        notes="Auto-generated reorder request:\n" + "\n".join(lines),
+        notes='Auto-generated from reorder alerts.',
         created_by=request.user,
     )
 
+    for item in items:
+        suggested_qty = max(item.reorder_level * 2 - item.quantity, item.reorder_level)
+        OrderItem.objects.create(
+            order=order,
+            medicine=item.medicine,
+            quantity_ordered=suggested_qty,
+            unit_cost=item.cost_price,
+        )
+    order.recompute_total()
+
     log_audit(request, 'create', obj=order,
-              details=f'Draft reorder #{order.id} created for {items.count()} low-stock item(s) from {supplier.name}.')
+              details=f'Draft purchase order #{order.id} created for {items.count()} low-stock item(s) from {supplier.name}.')
 
     messages.success(request, f'Draft purchase order #{order.id} created for {supplier.name}.')
-    return redirect('reorder_alerts')
+    return redirect('order_detail', pk=order.id)
 
 
 # Category Views
@@ -776,6 +806,122 @@ def supplier_report(request):
         'orders': orders,
     }
     return render(request, 'pos/supplier_report.html', context)
+
+
+# ---------------------------------------------------------------------------
+# Purchase Order Line-Item Workflow (REQ-PUR-4.1, REQ-PUR-4.2)
+# ---------------------------------------------------------------------------
+
+@login_required
+def order_list(request):
+    branch_filter = {} if request.active_branch_id is None else {'branch_id': request.active_branch_id}
+    orders = Order.objects.filter(**branch_filter).select_related('supplier', 'created_by').order_by('-created_at')
+    return render(request, 'pos/order_list.html', {'orders': orders})
+
+
+@login_required
+def order_add(request):
+    if request.active_branch_id is None:
+        messages.warning(request, 'Please select a specific branch before creating a purchase order.')
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        form = OrderForm(request.POST)
+        if form.is_valid():
+            order = form.save(commit=False)
+            order.branch_id = request.active_branch_id
+            order.created_by = request.user
+            order.status = 'pending'
+            order.save()
+
+            formset = OrderItemFormSet(request.POST, instance=order)
+            if formset.is_valid():
+                formset.save()
+                order.recompute_total()
+                log_audit(request, 'create', obj=order, details=f'Purchase order created for {order.supplier.name}.')
+                messages.success(request, 'Purchase order created.')
+                return redirect('order_detail', pk=order.pk)
+            else:
+                order.delete()
+    else:
+        form = OrderForm()
+        formset = OrderItemFormSet()
+
+    return render(request, 'pos/order_form.html', {
+        'form': form, 'formset': formset, 'title': 'New Purchase Order'
+    })
+
+
+@login_required
+def order_detail(request, pk):
+    order = get_object_or_404(Order, pk=pk)
+    items = order.items.select_related('medicine')
+    return render(request, 'pos/order_detail.html', {'order': order, 'items': items})
+
+
+@login_required
+def order_receive(request, pk):
+    """REQ-PUR-4.2: compares delivered quantities against ordered quantities,
+    logs discrepancies, and creates new Inventory batches for what actually arrived."""
+    order = get_object_or_404(Order, pk=pk)
+
+    if order.status != 'pending':
+        messages.error(request, 'Only pending orders can be received.')
+        return redirect('order_detail', pk=pk)
+
+    if request.method == 'POST':
+        any_discrepancy = False
+        received_any = False
+
+        for item in order.items.select_related('medicine'):
+            received_raw = request.POST.get(f'received_{item.id}', '').strip()
+            expiry_date = request.POST.get(f'expiry_{item.id}', '').strip()
+            batch_number = request.POST.get(f'batch_{item.id}', '').strip()
+
+            if received_raw == '':
+                continue
+
+            received_qty = int(received_raw)
+            item.quantity_received = received_qty
+            item.save()
+            received_any = True
+
+            if received_qty != item.quantity_ordered:
+                any_discrepancy = True
+
+            if received_qty > 0:
+                if not expiry_date:
+                    messages.error(request, f'Expiry date is required for {item.medicine.name} to receive stock.')
+                    return redirect('order_detail', pk=pk)
+                Inventory.objects.create(
+                    branch=order.branch,
+                    medicine=item.medicine,
+                    quantity=received_qty,
+                    reorder_level=10,
+                    expiry_date=expiry_date,
+                    batch_number=batch_number,
+                    cost_price=item.unit_cost,
+                )
+
+        if not received_any:
+            messages.error(request, 'Enter received quantities for at least one item.')
+            return redirect('order_detail', pk=pk)
+
+        order.status = 'completed'
+        order.received_by = request.user
+        order.received_at = timezone.now()
+        order.save()
+
+        log_audit(request, 'update', obj=order,
+                  details='Order received.' + (' Discrepancies found between ordered and received quantities.' if any_discrepancy else ' All quantities matched.'))
+
+        if any_discrepancy:
+            messages.warning(request, 'Order received with discrepancies — review quantities on the order detail page.')
+        else:
+            messages.success(request, 'Order received and inventory updated successfully.')
+        return redirect('order_detail', pk=pk)
+
+    return redirect('order_detail', pk=pk)
 
 
 @permission_required('pos.view_financial_report', raise_exception=True)

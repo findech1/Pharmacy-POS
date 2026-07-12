@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Medicine, Category, Customer, Supplier, Sale, SaleItem,
-    Branch, UserProfile, Inventory, Order,
+    Branch, UserProfile, Inventory, Order, OrderItem,
     DrugInteraction, Prescription, PrescriptionItem, DispensingLog, AuditLog
 )
 
@@ -14,6 +14,7 @@ admin.site.register(Branch)
 admin.site.register(UserProfile)
 admin.site.register(Inventory)
 admin.site.register(Order)
+admin.site.register(OrderItem)
 admin.site.register(DrugInteraction)
 admin.site.register(Prescription)
 admin.site.register(PrescriptionItem)
@@ -37,3 +38,4 @@ class AuditLogAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+    

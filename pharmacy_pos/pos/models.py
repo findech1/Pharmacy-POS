@@ -140,12 +140,45 @@ class Order(models.Model):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=ORDER_STATUS, default='pending')
     notes = models.TextField(blank=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders_created')
+    received_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders_received')
+    received_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Order #{self.id} - {self.supplier.name}"
+
+    def recompute_total(self):
+        total = sum((item.line_total for item in self.items.all()), Decimal('0.00'))
+        self.total_amount = total
+        self.save(update_fields=['total_amount'])
+
+    @property
+    def has_discrepancies(self):
+        return any(item.discrepancy not in (None, 0) for item in self.items.all())
+
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    medicine = models.ForeignKey(Medicine, on_delete=models.PROTECT)
+    quantity_ordered = models.PositiveIntegerField()
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    quantity_received = models.PositiveIntegerField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.medicine.name} x{self.quantity_ordered}"
+
+    @property
+    def line_total(self):
+        return self.quantity_ordered * self.unit_cost
+
+    @property
+    def discrepancy(self):
+        """REQ-PUR-4.2: variance between what was ordered and what actually arrived."""
+        if self.quantity_received is None:
+            return None
+        return self.quantity_received - self.quantity_ordered
 
 
 class Sale(models.Model):

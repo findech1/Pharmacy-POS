@@ -10,6 +10,12 @@ urlpatterns = [
     path('reorder-alerts/', views.reorder_alerts, name='reorder_alerts'),
     path('reorder-alerts/create/', views.create_reorder, name='create_reorder'),
 
+    # Purchase Order URLs
+    path('orders/', views.order_list, name='order_list'),
+    path('orders/add/', views.order_add, name='order_add'),
+    path('orders/<int:pk>/', views.order_detail, name='order_detail'),
+    path('orders/<int:pk>/receive/', views.order_receive, name='order_receive'),
+
     # Medicine URLs
     path('medicines/', views.medicine_list, name='medicine_list'),
     path('medicines/add/', views.medicine_add, name='medicine_add'),
@@ -23,6 +29,7 @@ urlpatterns = [
     # POS URLs
     path('pos/', views.pos_sale, name='pos_sale'),
     path('pos/process/', views.process_sale, name='process_sale'),
+    path('pos/barcode-lookup/', views.barcode_lookup, name='barcode_lookup'),
 
     # Inventory URLs
     path('inventory/', views.inventory_list, name='inventory_list'),
