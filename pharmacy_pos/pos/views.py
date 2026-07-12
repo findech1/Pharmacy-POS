@@ -12,9 +12,10 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from .models import (
     Medicine, Inventory, Customer, Sale, Supplier, Order, Category, Payment,
-    Branch, SaleItem, Prescription, PrescriptionItem, DispensingLog, DrugInteraction
+    Branch, SaleItem, Prescription, PrescriptionItem, DispensingLog, DrugInteraction, AuditLog
 )
 from .forms import *
+from .audit import log_audit
 from django.views.decorators.csrf import csrf_exempt
 import json
 
@@ -26,6 +27,7 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
+            log_audit(request, 'login', details=f'User {user.username} logged in.')
             return redirect('dashboard')
         else:
             messages.error(request, 'Invalid username or password.')
@@ -77,7 +79,9 @@ def add_user(request):
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
-            form.save()
+            new_user = form.save()
+            log_audit(request, 'create', obj=new_user, model_name='User',
+                      details=f'Created user {new_user.username} (role: {new_user.profile.role}).')
             messages.success(request, 'User created successfully!')
             return redirect('dashboard')
     else:
@@ -92,12 +96,14 @@ def switch_branch(request, branch_id):
     if branch_id == 0:
         if profile.role == 'admin':
             request.session['active_branch_id'] = None
+            log_audit(request, 'branch_switch', details='Switched to All Branches view.')
             messages.success(request, 'Now viewing: All Branches')
         return redirect(request.META.get('HTTP_REFERER', 'dashboard'))
 
     if profile.role == 'admin' or profile.get_accessible_branches().filter(id=branch_id).exists():
         request.session['active_branch_id'] = branch_id
         branch = Branch.objects.get(id=branch_id)
+        log_audit(request, 'branch_switch', obj=branch, details=f'Switched to {branch.name}.')
         messages.success(request, f'Now viewing: {branch.name}')
     return redirect(request.META.get('HTTP_REFERER', 'dashboard'))
 
@@ -129,7 +135,9 @@ def medicine_add(request):
     if request.method == 'POST':
         form = MedicineForm(request.POST)
         if form.is_valid():
-            form.save()
+            medicine = form.save()
+            log_audit(request, 'create', obj=medicine,
+                      details=f'Added medicine {medicine.name} (price: Ksh {medicine.price}).')
             messages.success(request, 'Medicine added successfully!')
             return redirect('medicine_list')
     else:
@@ -143,7 +151,10 @@ def medicine_edit(request, pk):
     if request.method == 'POST':
         form = MedicineForm(request.POST, instance=medicine)
         if form.is_valid():
+            changed_fields = form.changed_data
             form.save()
+            log_audit(request, 'update', obj=medicine,
+                      details=f'Updated fields: {", ".join(changed_fields) if changed_fields else "none"}.')
             messages.success(request, 'Medicine updated successfully!')
             return redirect('medicine_list')
     else:
@@ -179,12 +190,30 @@ def customer_add(request):
     if request.method == 'POST':
         form = CustomerForm(request.POST)
         if form.is_valid():
-            form.save()
+            customer = form.save()
+            log_audit(request, 'create', obj=customer, details=f'Added customer {customer.name}.')
             messages.success(request, 'Customer added successfully!')
             return redirect('customer_list')
     else:
         form = CustomerForm()
     return render(request, 'pos/customer_form.html', {'form': form, 'title': 'Add Customer'})
+
+
+@login_required
+def customer_edit(request, pk):
+    customer = get_object_or_404(Customer, pk=pk)
+    if request.method == 'POST':
+        form = CustomerForm(request.POST, instance=customer)
+        if form.is_valid():
+            changed_fields = form.changed_data
+            form.save()
+            log_audit(request, 'update', obj=customer,
+                      details=f'Updated fields: {", ".join(changed_fields) if changed_fields else "none"}.')
+            messages.success(request, 'Customer updated successfully!')
+            return redirect('customer_list')
+    else:
+        form = CustomerForm(instance=customer)
+    return render(request, 'pos/customer_form.html', {'form': form, 'title': 'Edit Customer'})
 
 
 # POS/Sales Views
@@ -358,6 +387,9 @@ def process_sale(request):
                     id__in=dispensing_log_ids, branch_id=request.active_branch_id, sale__isnull=True
                 ).update(sale=sale)
 
+            log_audit(request, 'sale', obj=sale,
+                      details=f'Sale total: Ksh {sale.total_amount:.2f}, payment: {sale.get_payment_method_display()}.')
+
             return JsonResponse({'success': True, 'sale_id': sale.id})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
@@ -381,6 +413,8 @@ def inventory_add(request):
             if not request.is_branch_admin:
                 inv.branch_id = request.active_branch_id
             inv.save()
+            log_audit(request, 'create', obj=inv,
+                      details=f'Added {inv.quantity} units of {inv.medicine.name} (batch {inv.batch_number or "N/A"}).')
             messages.success(request, 'Inventory added successfully!')
             return redirect('inventory_list')
     else:
@@ -400,12 +434,30 @@ def category_add(request):
     if request.method == 'POST':
         form = CategoryForm(request.POST)
         if form.is_valid():
-            form.save()
+            category = form.save()
+            log_audit(request, 'create', obj=category, details=f'Added category {category.name}.')
             messages.success(request, 'Category added successfully!')
             return redirect('category_list')
     else:
         form = CategoryForm()
     return render(request, 'pos/category_form.html', {'form': form, 'title': 'Add Category'})
+
+
+@login_required
+def category_edit(request, pk):
+    category = get_object_or_404(Category, pk=pk)
+    if request.method == 'POST':
+        form = CategoryForm(request.POST, instance=category)
+        if form.is_valid():
+            changed_fields = form.changed_data
+            form.save()
+            log_audit(request, 'update', obj=category,
+                      details=f'Updated fields: {", ".join(changed_fields) if changed_fields else "none"}.')
+            messages.success(request, 'Category updated successfully!')
+            return redirect('category_list')
+    else:
+        form = CategoryForm(instance=category)
+    return render(request, 'pos/category_form.html', {'form': form, 'title': 'Edit Category'})
 
 
 # Supplier Views
@@ -420,12 +472,30 @@ def supplier_add(request):
     if request.method == 'POST':
         form = SupplierForm(request.POST)
         if form.is_valid():
-            form.save()
+            supplier = form.save()
+            log_audit(request, 'create', obj=supplier, details=f'Added supplier {supplier.name}.')
             messages.success(request, 'Supplier added successfully!')
             return redirect('supplier_list')
     else:
         form = SupplierForm()
     return render(request, 'pos/supplier_form.html', {'form': form, 'title': 'Add Supplier'})
+
+
+@login_required
+def supplier_edit(request, pk):
+    supplier = get_object_or_404(Supplier, pk=pk)
+    if request.method == 'POST':
+        form = SupplierForm(request.POST, instance=supplier)
+        if form.is_valid():
+            changed_fields = form.changed_data
+            form.save()
+            log_audit(request, 'update', obj=supplier,
+                      details=f'Updated fields: {", ".join(changed_fields) if changed_fields else "none"}.')
+            messages.success(request, 'Supplier updated successfully!')
+            return redirect('supplier_list')
+    else:
+        form = SupplierForm(instance=supplier)
+    return render(request, 'pos/supplier_form.html', {'form': form, 'title': 'Edit Supplier'})
 
 
 # Sales Report Views
@@ -693,6 +763,46 @@ def financial_report(request):
     return render(request, 'pos/financial_report.html', context)
 
 
+@login_required
+def audit_log_list(request):
+    if request.user.profile.role != 'admin':
+        messages.error(request, 'Only System Admins can view the audit trail.')
+        return redirect('dashboard')
+
+    logs = AuditLog.objects.select_related('user', 'branch').all()
+
+    action = request.GET.get('action')
+    branch_id = request.GET.get('branch')
+    username = request.GET.get('user')
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+
+    if action:
+        logs = logs.filter(action=action)
+    if branch_id:
+        logs = logs.filter(branch_id=branch_id)
+    if username:
+        logs = logs.filter(user__username__icontains=username)
+    if start_date:
+        logs = logs.filter(timestamp__date__gte=start_date)
+    if end_date:
+        logs = logs.filter(timestamp__date__lte=end_date)
+
+    paginator = Paginator(logs, 25)
+    page = request.GET.get('page')
+    logs = paginator.get_page(page)
+
+    return render(request, 'pos/audit_log_list.html', {
+        'logs': logs,
+        'action_choices': AuditLog.ACTION_CHOICES,
+        'selected_action': action,
+        'selected_branch': branch_id,
+        'selected_user': username,
+        'start_date': start_date,
+        'end_date': end_date,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Patient Profile & Prescription Lifecycle Management
 # ---------------------------------------------------------------------------
@@ -726,6 +836,8 @@ def prescription_add(request):
                     messages.error(request, 'A valid doctor license number is required for controlled substances.')
                     prescription.delete()
                     return redirect('prescription_add')
+                log_audit(request, 'create', obj=prescription,
+                          details=f'Prescription for {prescription.patient.name} by Dr. {prescription.doctor_name}.')
                 messages.success(request, 'Prescription recorded successfully.')
                 return redirect('prescription_detail', pk=prescription.pk)
             else:
@@ -784,7 +896,7 @@ def dispense_item(request, item_id):
                 messages.error(request, f'Cannot dispense more than the authorized {item.quantity_per_refill} units per refill.')
                 return redirect('prescription_detail', pk=item.prescription_id)
 
-            DispensingLog.objects.create(
+            log = DispensingLog.objects.create(
                 prescription_item=item,
                 quantity_dispensed=quantity,
                 dispensed_by=request.user,
@@ -794,6 +906,10 @@ def dispense_item(request, item_id):
             item.refills_used += 1
             item.last_dispensed_at = timezone.now()
             item.save()
+
+            log_audit(request, 'dispense', obj=log,
+                      details=f'Dispensed {quantity}x {item.medicine.name} to {item.prescription.patient.name}.' +
+                              (' Interaction warning acknowledged.' if interactions else ''))
 
             messages.success(request, f'{quantity}x {item.medicine.name} dispensed. Proceed to checkout to complete the sale.')
             return redirect('prescription_detail', pk=item.prescription_id)

@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+
+{% block header %}Audit Log{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-4">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">
+            <i class="fas fa-shield-alt mr-2 text-blue-600"></i>Audit Trail
+        </h1>
+        <span class="text-sm text-gray-500">
+            <i class="fas fa-lock mr-1"></i>Read-only — entries cannot be modified or deleted
+        </span>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-xl shadow-lg p-4 mb-6">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Action</label>
+                <select name="action" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="">All actions</option>
+                    {% for value, label in action_choices %}
+                    <option value="{{ value }}" {% if selected_action == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Username</label>
+                <input type="text" name="user" value="{{ selected_user|default:'' }}" placeholder="Search user..."
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">From</label>
+                <input type="date" name="start_date" value="{{ start_date|default:'' }}"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">To</label>
+                <input type="date" name="end_date" value="{{ end_date|default:'' }}"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div>
+                <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                    <i class="fas fa-filter mr-1"></i>Filter
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Log table -->
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <table class="w-full text-left">
+            <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                    <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Timestamp</th>
+                    <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">User</th>
+                    <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Branch</th>
+                    <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                    <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Details</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for log in logs %}
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-6 py-4 text-gray-500 text-sm whitespace-nowrap">{{ log.timestamp|date:"M d, Y H:i:s" }}</td>
+                    <td class="px-6 py-4 text-gray-800 text-sm">{{ log.user.username|default:"System" }}</td>
+                    <td class="px-6 py-4 text-gray-600 text-sm">{{ log.branch.name|default:"—" }}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 text-xs font-medium rounded-full
+                            {% if log.action == 'sale' %}bg-green-100 text-green-700
+                            {% elif log.action == 'dispense' %}bg-purple-100 text-purple-700
+                            {% elif log.action == 'login' %}bg-blue-100 text-blue-700
+                            {% elif log.action == 'delete' %}bg-red-100 text-red-700
+                            {% else %}bg-gray-100 text-gray-700{% endif %}">
+                            {{ log.get_action_display }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-gray-600 text-sm">
+                        <span class="font-medium text-gray-800">{{ log.object_repr }}</span>
+                        {% if log.details %}<br><span class="text-xs text-gray-500">{{ log.details }}</span>{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                        <i class="fas fa-shield-alt text-3xl mb-3 text-gray-300"></i>
+                        <p>No audit entries match these filters.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if logs.has_other_pages %}
+    <div class="flex justify-center mt-6 space-x-2">
+        {% if logs.has_previous %}
+        <a href="?page={{ logs.previous_page_number }}" class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Previous</a>
+        {% endif %}
+        <span class="px-3 py-1 text-sm text-gray-500">Page {{ logs.number }} of {{ logs.paginator.num_pages }}</span>
+        {% if logs.has_next %}
+        <a href="?page={{ logs.next_page_number }}" class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

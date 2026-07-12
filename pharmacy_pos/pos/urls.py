@@ -6,6 +6,7 @@ urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('add-user/', views.add_user, name='add_user'),
     path('switch-branch/<int:branch_id>/', views.switch_branch, name='switch_branch'),
+    path('audit-log/', views.audit_log_list, name='audit_log_list'),
 
     # Medicine URLs
     path('medicines/', views.medicine_list, name='medicine_list'),
@@ -15,6 +16,7 @@ urlpatterns = [
     # Customer URLs
     path('customers/', views.customer_list, name='customer_list'),
     path('customers/add/', views.customer_add, name='customer_add'),
+    path('customers/edit/<int:pk>/', views.customer_edit, name='customer_edit'),
 
     # POS URLs
     path('pos/', views.pos_sale, name='pos_sale'),
@@ -27,10 +29,12 @@ urlpatterns = [
     # Category URLs
     path('categories/', views.category_list, name='category_list'),
     path('categories/add/', views.category_add, name='category_add'),
+    path('categories/edit/<int:pk>/', views.category_edit, name='category_edit'),
 
     # Supplier URLs
     path('suppliers/', views.supplier_list, name='supplier_list'),
     path('suppliers/add/', views.supplier_add, name='supplier_add'),
+    path('suppliers/edit/<int:pk>/', views.supplier_edit, name='supplier_edit'),
 
     # Reports URLs
     path('reports/sales/', views.sales_report, name='sales_report'),

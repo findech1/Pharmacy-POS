@@ -349,3 +349,38 @@ class DispensingLog(models.Model):
 
     def __str__(self):
         return f"Dispensed {self.quantity_dispensed}x {self.prescription_item.medicine.name}"
+
+
+# ---------------------------------------------------------------------------
+# Unalterable Audit Trail (SRS Section 5.3)
+# ---------------------------------------------------------------------------
+
+class AuditLog(models.Model):
+    ACTION_CHOICES = [
+        ('login', 'Login'),
+        ('logout', 'Logout'),
+        ('create', 'Create'),
+        ('update', 'Update'),
+        ('delete', 'Delete'),
+        ('sale', 'Sale Completed'),
+        ('dispense', 'Prescription Dispensed'),
+        ('branch_switch', 'Branch Switched'),
+        ('other', 'Other'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, default='other')
+    model_name = models.CharField(max_length=100, blank=True)
+    object_id = models.CharField(max_length=50, blank=True)
+    object_repr = models.CharField(max_length=255, blank=True)
+    details = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        who = self.user.username if self.user else 'System'
+        return f"[{self.timestamp:%Y-%m-%d %H:%M}] {who} — {self.get_action_display()} — {self.object_repr}"
