@@ -402,6 +402,15 @@
   let saleId = null;
   let dispensedLogIds = [];
 
+  // Was being called in several places but never defined — that missing
+  // function caused a silent JS error on every cart update, which in turn
+  // broke the barcode fetch's promise chain (showing "Lookup failed" even
+  // on successful scans). Defined here as a safe no-op since no dedicated
+  // mobile summary element exists in this template.
+  function updateMobileSummary() {
+    // No mobile-specific summary UI in this template yet — intentional no-op.
+  }
+
   // Add a dispensed prescription item straight to the cart, and auto-select its patient
   function addDispensedToCart(logId, medicineId, medicineName, price, quantity, patientId, patientName) {
     const existingItem = cart.find((item) => item.id === medicineId);
