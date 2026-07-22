@@ -5,41 +5,91 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Eagle Health Pos System</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
 </head>
-<body class="bg-gradient-to-br from-blue-600 to-purple-700 min-h-screen flex items-center justify-center">
-    <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
+<body class="bg-gradient-to-br from-blue-700 to-blue-900 min-h-screen flex items-center justify-center px-4">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
         <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">Eagle Health Pos System</h1>
-            <p class="text-gray-600">Please sign in to continue</p>
+            <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-pills text-white text-2xl"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800 mb-1">Eagle Health Pos System</h1>
+            <p class="text-gray-500 text-sm">Please sign in to continue</p>
         </div>
-        
+
         {% if messages %}
         {% for message in messages %}
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {{ message }}
+        <div class="flex items-start px-4 py-3 rounded-lg mb-4 text-sm
+            {% if message.tags == 'error' %}bg-red-50 border border-red-300 text-red-700
+            {% elif message.tags == 'warning' %}bg-yellow-50 border border-yellow-300 text-yellow-800
+            {% else %}bg-blue-50 border border-blue-300 text-blue-700{% endif %}">
+            <i class="fas fa-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'warning' %}clock{% else %}info-circle{% endif %} mr-2 mt-0.5"></i>
+            <span>{{ message }}</span>
         </div>
         {% endfor %}
         {% endif %}
-        
-        <form method="post" class="space-y-6">
+
+        <form method="post" class="space-y-5" id="login-form">
             {% csrf_token %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                <input type="text" name="username" required 
-                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="relative">
+                    <i class="fas fa-user absolute left-3 top-3 text-gray-400 text-sm"></i>
+                    <input type="text" name="username" required autofocus autocomplete="username"
+                           class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
             </div>
-            
+
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                <input type="password" name="password" required 
-                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="relative">
+                    <i class="fas fa-lock absolute left-3 top-3 text-gray-400 text-sm"></i>
+                    <input type="password" name="password" id="password-field" required autocomplete="current-password"
+                           class="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <button type="button" id="toggle-password" tabindex="-1"
+                            class="absolute right-3 top-3 text-gray-400 hover:text-gray-600 text-sm">
+                        <i class="fas fa-eye" id="toggle-password-icon"></i>
+                    </button>
+                </div>
             </div>
-            
-            <button type="submit" 
-                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
-                Sign In
+
+            <button type="submit" id="submit-btn"
+                    class="w-full bg-blue-600 text-white py-2.5 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200 flex items-center justify-center">
+                <span id="submit-text">Sign In</span>
+                <i class="fas fa-circle-notch fa-spin ml-2 hidden" id="submit-spinner"></i>
             </button>
         </form>
+
+        <p class="text-center text-xs text-gray-400 mt-6">
+            EagleHealth Pharmacy &middot; Kangemi &middot; Kawangware &middot; Kibera &middot; Bungoma
+        </p>
     </div>
+
+    <script>
+        // Show/hide password
+        const toggleBtn = document.getElementById('toggle-password');
+        const passwordField = document.getElementById('password-field');
+        const toggleIcon = document.getElementById('toggle-password-icon');
+
+        toggleBtn.addEventListener('click', function () {
+            const isHidden = passwordField.type === 'password';
+            passwordField.type = isHidden ? 'text' : 'password';
+            toggleIcon.classList.toggle('fa-eye');
+            toggleIcon.classList.toggle('fa-eye-slash');
+        });
+
+        // Loading state on submit
+        const form = document.getElementById('login-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const submitText = document.getElementById('submit-text');
+        const submitSpinner = document.getElementById('submit-spinner');
+
+        form.addEventListener('submit', function () {
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+            submitText.textContent = 'Signing in...';
+            submitSpinner.classList.remove('hidden');
+        });
+    </script>
 </body>
 </html>
